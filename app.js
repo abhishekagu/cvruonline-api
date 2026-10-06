@@ -35,7 +35,7 @@ app.use('/api/contact', contactRoutes);
 
 // Health Check Route
 app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'success', message: 'LPU Online API is running!' });
+    res.status(200).json({ status: 'success', message: 'CVRU Online API is running!' });
 });
 
 // Handle unknown routes
