@@ -72,7 +72,8 @@ export const verifyDocument = asyncHandler(async (req, res) => {
 // @route   GET /api/v1/admin/dashboard/metrics
 // @access  Private (Admin)
 export const getDashboardMetrics = asyncHandler(async (req, res) => {
-    const totalUsers = await User.countDocuments({ role: 'applicant' });
+    // Count all registered users except the current admin
+    const totalUsers = await User.countDocuments({ _id: { $ne: req.user._id } });
     const totalApplications = await Application.countDocuments({ status: { $ne: 'Draft' } });
     const totalLeads = await Lead.countDocuments();
     const acceptedApplications = await Application.countDocuments({ status: 'Accepted' });

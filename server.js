@@ -1,12 +1,16 @@
 import dotenv from 'dotenv';
 import app from './app.js';
 import connectDB from './config/db.js';
+import { seedAdmin } from './utils/seedAdmin.js';
 
 // Configure environment variables
 dotenv.config();
 
 // Connect to Database
 connectDB();
+
+// Seed Admin User
+seedAdmin();
 
 const PORT = process.env.PORT || 8000;
 
@@ -44,3 +48,7 @@ process.on('uncaughtException', (err) => {
     console.error(err.name, err.message);
     process.exit(1);
 });
+
+// nodemon trigger
+
+// nodemon trigger 2
