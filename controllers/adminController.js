@@ -2,6 +2,8 @@ import Application from '../models/Application.js';
 import Document from '../models/Document.js';
 import User from '../models/User.js';
 import Lead from '../models/Lead.js';
+import Payment from '../models/Payment.js';
+import Contact from '../models/Contact.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/apiError.js';
 import { ApiResponse } from '../utils/apiResponse.js';
@@ -75,8 +77,20 @@ export const getDashboardMetrics = asyncHandler(async (req, res) => {
     const totalLeads = await Lead.countDocuments();
     const acceptedApplications = await Application.countDocuments({ status: 'Accepted' });
 
-    // Mock revenue for now (Phase 5 will handle actual payments)
-    const mockRevenue = acceptedApplications * 120000; 
+    // Fetch 5 most recent applications
+    const recentApplications = await Application.find({ status: { $ne: 'Draft' } })
+        .populate('user', 'firstName lastName email')
+        .populate('program', 'name')
+        .sort('-createdAt')
+        .limit(5);
+
+    // Calculate actual total revenue from successful payments
+    const revenueResult = await Payment.aggregate([
+        { $match: { status: 'Success' } },
+        { $group: { _id: null, totalRevenue: { $sum: '$amount' } } }
+    ]);
+    
+    const totalRevenue = revenueResult.length > 0 ? revenueResult[0].totalRevenue : 0;
 
     res.status(200).json(new ApiResponse(200, {
         metrics: {
@@ -84,7 +98,16 @@ export const getDashboardMetrics = asyncHandler(async (req, res) => {
             totalApplications,
             totalLeads,
             acceptedApplications,
-            mockRevenue
+            totalRevenue,
+            recentApplications
         }
     }, 'Dashboard metrics fetched successfully'));
+});
+
+// @desc    Get all contact inquiries
+// @route   GET /api/v1/admin/contacts
+// @access  Private (Admin)
+export const getContacts = asyncHandler(async (req, res) => {
+    const contacts = await Contact.find().sort('-createdAt');
+    res.status(200).json(new ApiResponse(200, { contacts }, 'Contacts fetched successfully'));
 });

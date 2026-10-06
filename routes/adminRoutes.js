@@ -3,7 +3,8 @@ import {
     getAllApplications,
     updateApplicationStatus,
     verifyDocument,
-    getDashboardMetrics
+    getDashboardMetrics,
+    getContacts
 } from '../controllers/adminController.js';
 import { verifyJWT, restrictTo } from '../middlewares/authMiddleware.js';
 
@@ -22,5 +23,8 @@ router.patch('/documents/:id/verify', verifyDocument);
 
 // Dashboard Metrics
 router.get('/dashboard/metrics', getDashboardMetrics);
+
+// Contact Inquiries
+router.get('/contacts', getContacts);
 
 export default router;

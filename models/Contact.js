@@ -1,0 +1,48 @@
+import mongoose from 'mongoose';
+
+const contactSchema = new mongoose.Schema(
+    {
+        firstName: {
+            type: String,
+            required: [true, 'First name is required'],
+            trim: true,
+        },
+        lastName: {
+            type: String,
+            required: [true, 'Last name is required'],
+            trim: true,
+        },
+        email: {
+            type: String,
+            required: [true, 'Email is required'],
+            match: [
+                /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
+                'Please provide a valid email address',
+            ],
+            trim: true,
+        },
+        phone: {
+            type: String,
+            required: [true, 'Phone number is required'],
+            trim: true,
+        },
+        program: {
+            type: String,
+            default: 'Not Specified',
+        },
+        message: {
+            type: String,
+            required: [true, 'Message is required'],
+        },
+        status: {
+            type: String,
+            enum: ['New', 'Reviewed', 'Replied'],
+            default: 'New',
+        }
+    },
+    {
+        timestamps: true,
+    }
+);
+
+export default mongoose.model('Contact', contactSchema);

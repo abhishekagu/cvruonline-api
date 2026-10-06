@@ -11,6 +11,7 @@ import applicationRoutes from './routes/applicationRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import lmsRoutes from './routes/lmsRoutes.js';
+import contactRoutes from './routes/contactRoutes.js';
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use('/api/applications', applicationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/lms', lmsRoutes);
+app.use('/api/contact', contactRoutes);
 
 // Health Check Route
 app.get('/api/health', (req, res) => {
