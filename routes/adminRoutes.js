@@ -4,7 +4,9 @@ import {
     updateApplicationStatus,
     verifyDocument,
     getDashboardMetrics,
-    getContacts
+    getContacts,
+    getAllUsers,
+    getUserById
 } from '../controllers/adminController.js';
 import { verifyJWT, restrictTo } from '../middlewares/authMiddleware.js';
 
@@ -12,7 +14,11 @@ const router = express.Router();
 
 // All admin routes require admin privileges
 router.use(verifyJWT);
-router.use(restrictTo('admin', 'super-admin'));
+router.use(restrictTo('admin', 'superadmin', 'super-admin'));
+
+// Users Management
+router.get('/users', getAllUsers);
+router.get('/users/:id', getUserById);
 
 // Application Management
 router.get('/applications', getAllApplications);

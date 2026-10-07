@@ -112,3 +112,47 @@ export const getContacts = asyncHandler(async (req, res) => {
     const contacts = await Contact.find().sort('-createdAt');
     res.status(200).json(new ApiResponse(200, { contacts }, 'Contacts fetched successfully'));
 });
+
+// @desc    Get all users (with optional filtering and pagination)
+// @route   GET /api/v1/admin/users
+// @access  Private (Admin)
+export const getAllUsers = asyncHandler(async (req, res) => {
+    // Pagination (optional, default to 1 and 50)
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
+    const query = {};
+    if (req.query.role) query.role = req.query.role;
+
+    const users = await User.find(query)
+        .select('-password')
+        .sort('-createdAt')
+        .skip(skip)
+        .limit(limit);
+
+    const total = await User.countDocuments(query);
+
+    res.status(200).json(
+        new ApiResponse(200, { 
+            users, 
+            total,
+            page,
+            pages: Math.ceil(total / limit)
+        }, 'Users fetched successfully')
+    );
+});
+
+// @desc    Get user details by ID
+// @route   GET /api/v1/admin/users/:id
+// @access  Private (Admin)
+export const getUserById = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.params.id).select('-password');
+    
+    if (!user) {
+        throw new ApiError(404, 'User not found');
+    }
+
+    res.status(200).json(new ApiResponse(200, { user }, 'User details fetched successfully'));
+});
+
