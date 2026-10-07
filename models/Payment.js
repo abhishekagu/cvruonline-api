@@ -10,7 +10,7 @@ const paymentSchema = new mongoose.Schema(
         application: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Application',
-            required: true,
+            required: false, // Changed from true to allow Paytm payments without application
         },
         amount: {
             type: Number,
@@ -34,12 +34,11 @@ const paymentSchema = new mongoose.Schema(
         },
         status: {
             type: String,
-            enum: ['Created', 'Success', 'Failed', 'Refunded'],
+            enum: ['Created', 'Pending', 'Success', 'Failed', 'Refunded'],
             default: 'Created',
         },
         type: {
             type: String,
-            enum: ['Application Fee', 'Tuition Fee'],
             required: true,
         },
     },

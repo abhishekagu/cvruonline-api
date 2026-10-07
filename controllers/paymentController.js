@@ -100,3 +100,27 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     
     res.status(200).json(new ApiResponse(200, { payment }, 'Payment verified successfully'));
 });
+
+// @desc    Get logged in user's payments
+// @route   GET /api/payments/my-payments
+// @access  Private
+export const getUserPayments = asyncHandler(async (req, res) => {
+    const payments = await Payment.find({ user: req.user._id })
+        .populate('application') // Populates application info if needed
+        .sort({ createdAt: -1 });
+
+    res.status(200).json(new ApiResponse(200, { payments }, 'User payments fetched successfully'));
+});
+
+// @desc    Get all payments (Admin only)
+// @route   GET /api/payments/all
+// @access  Private/Admin
+export const getAllPayments = asyncHandler(async (req, res) => {
+    const payments = await Payment.find()
+        .populate('user', 'firstName lastName email')
+        .populate('application')
+        .sort({ createdAt: -1 });
+
+    res.status(200).json(new ApiResponse(200, { payments }, 'All payments fetched successfully'));
+});
+
