@@ -17,11 +17,13 @@ const PAYTM_WEBSITE = process.env.NODE_ENV === 'production' ? 'DEFAULT' : 'WEBST
 // @route   POST /api/payments/paytm/initiate
 // @access  Private
 export const initiatePaytmPayment = asyncHandler(async (req, res) => {
-    const { amount, programId, semester } = req.body;
+    const { amount, programId, semester, type } = req.body;
 
-    if (!amount || !programId || !semester) {
-        throw new ApiError(400, 'Amount, programId, and semester are required');
+    if (!amount) {
+        throw new ApiError(400, 'Amount is required');
     }
+    
+    let paymentType = type || `Tuition Fee - Sem ${semester || 1}`;
 
     const orderId = `ORD_${Date.now()}_${req.user._id.toString().substring(0, 6)}`;
     const custId = req.user._id.toString();
@@ -85,10 +87,10 @@ export const initiatePaytmPayment = asyncHandler(async (req, res) => {
                 // Pre-save the payment attempt in our database with 'Pending' status
                 await Payment.create({
                     user: req.user._id,
-                    application: null, // Depending on if an application exists yet
+                    application: req.body.applicationId || null,
                     amount: amount,
-                    type: `Tuition Fee - Sem ${semester}`,
-                    razorpayOrderId: orderId, // Reusing field or you can add paytmOrderId to model
+                    type: paymentType,
+                    orderId: orderId, // Reusing field or you can add paytmOrderId to model
                     status: 'Created'
                 });
 
@@ -156,22 +158,32 @@ export const verifyPaytmPayment = asyncHandler(async (req, res) => {
 
         post_res.on('end', async function(){
             const parsedResponse = JSON.parse(response);
+            const resultStatus = parsedResponse.body.resultInfo.resultStatus;
             
             // Validate transaction status securely
-            if (parsedResponse.body.resultInfo.resultStatus === 'TXN_SUCCESS') {
+            if (resultStatus === 'TXN_SUCCESS') {
                 // Update payment record in database securely
-                await Payment.findOneAndUpdate(
-                    { razorpayOrderId: orderId }, // Assume orderId is saved here for now
-                    { status: 'Success' }
+                const payment = await Payment.findOneAndUpdate(
+                    { orderId: orderId }, // Assume orderId is saved here for now
+                    { status: 'Success' },
+                    { new: true }
                 );
 
-                res.status(200).json(new ApiResponse(200, parsedResponse.body, "Payment verified as successful"));
-            } else {
-                await Payment.findOneAndUpdate(
-                    { razorpayOrderId: orderId },
-                    { status: 'Failed' }
+                res.status(200).json(new ApiResponse(200, { paytmResponse: parsedResponse.body, paymentId: payment?._id, status: 'Success' }, "Payment verified as successful"));
+            } else if (resultStatus === 'PENDING') {
+                const payment = await Payment.findOneAndUpdate(
+                    { orderId: orderId },
+                    { status: 'Pending' },
+                    { new: true }
                 );
-                res.status(400).json(new ApiResponse(400, parsedResponse.body, "Payment verification failed or pending"));
+                res.status(200).json(new ApiResponse(200, { paytmResponse: parsedResponse.body, paymentId: payment?._id, status: 'Pending' }, "Payment is pending"));
+            } else {
+                const payment = await Payment.findOneAndUpdate(
+                    { orderId: orderId },
+                    { status: 'Failed' },
+                    { new: true }
+                );
+                res.status(400).json(new ApiResponse(400, { paytmResponse: parsedResponse.body, paymentId: payment?._id, status: 'Failed' }, "Payment verification failed"));
             }
         });
     });
@@ -182,4 +194,38 @@ export const verifyPaytmPayment = asyncHandler(async (req, res) => {
 
     post_req.write(post_data);
     post_req.end();
+});
+
+// @desc    Paytm S2S Webhook Callback
+// @route   POST /api/payments/paytm/webhook
+// @access  Public
+export const paytmWebhook = asyncHandler(async (req, res) => {
+    const paytmResponse = req.body;
+    
+    if (!paytmResponse || !paytmResponse.ORDERID) {
+        return res.status(400).send("Bad Request");
+    }
+
+    const orderId = paytmResponse.ORDERID;
+    const resultStatus = paytmResponse.STATUS;
+    const checksum = paytmResponse.CHECKSUMHASH;
+
+    // Remove CHECKSUMHASH from body to verify signature
+    delete paytmResponse.CHECKSUMHASH;
+
+    const isVerifySignature = PaytmChecksum.verifySignature(paytmResponse, PAYTM_MERCHANT_KEY, checksum);
+    
+    if (isVerifySignature) {
+        if (resultStatus === 'TXN_SUCCESS') {
+            await Payment.findOneAndUpdate({ orderId }, { status: 'Success' });
+        } else if (resultStatus === 'PENDING') {
+            await Payment.findOneAndUpdate({ orderId }, { status: 'Pending' });
+        } else {
+            await Payment.findOneAndUpdate({ orderId }, { status: 'Failed' });
+        }
+        res.status(200).send("OK");
+    } else {
+        console.error("Paytm Webhook Signature Verification Failed");
+        res.status(400).send("Checksum Mismatch");
+    }
 });

@@ -20,17 +20,15 @@ const paymentSchema = new mongoose.Schema(
             type: String,
             default: 'INR',
         },
-        razorpayOrderId: {
+        orderId: {
             type: String,
             required: true,
         },
-        razorpayPaymentId: {
+        transactionId: {
             type: String,
-            // populated after successful payment
         },
-        razorpaySignature: {
+        signature: {
             type: String,
-            // populated after successful payment
         },
         status: {
             type: String,

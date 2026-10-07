@@ -23,7 +23,6 @@
     "morgan": "^1.12.1",
     "nodemailer": "^10.0.15",
     "paytmchecksum": "^1.5.1",
-    "razorpay": "^2.9.8",
     "zod": "^4.6.5"
   },
   "devDependencies": {
