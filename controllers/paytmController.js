@@ -1,6 +1,8 @@
 import https from 'https';
 import PaytmChecksum from 'paytmchecksum';
 import Payment from '../models/Payment.js';
+import Plan from '../models/Plan.js';
+import Subscription from '../models/Subscription.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/apiError.js';
 import { ApiResponse } from '../utils/apiResponse.js';
@@ -13,17 +15,87 @@ const PAYTM_ENVIRONMENT = process.env.NODE_ENV === 'production'
     : 'securegw-stage.paytm.in';
 const PAYTM_WEBSITE = process.env.NODE_ENV === 'production' ? 'DEFAULT' : 'WEBSTAGING';
 
+const handleSuccessfulPayment = async (orderId) => {
+    const payment = await Payment.findOne({ orderId }).populate('plan');
+    if (!payment) return null;
+    
+    if (payment.status === 'Success') return payment;
+
+    payment.status = 'Success';
+
+    if (payment.plan) {
+        const plan = payment.plan;
+        const programId = plan.program;
+        
+        let expiryDate = null;
+        if (plan.durationInDays) {
+            expiryDate = new Date();
+            expiryDate.setDate(expiryDate.getDate() + plan.durationInDays);
+        }
+
+        let subscription = await Subscription.findOne({ user: payment.user, program: programId });
+        
+        if (subscription) {
+            subscription.plan = plan._id;
+            subscription.status = 'Active';
+            if (subscription.expiryDate && subscription.expiryDate > new Date() && plan.durationInDays) {
+                subscription.expiryDate = new Date(subscription.expiryDate.getTime() + plan.durationInDays * 24 * 60 * 60 * 1000);
+            } else {
+                subscription.expiryDate = expiryDate;
+            }
+            await subscription.save();
+        } else {
+            subscription = await Subscription.create({
+                user: payment.user,
+                program: programId,
+                plan: plan._id,
+                status: 'Active',
+                startDate: new Date(),
+                expiryDate: expiryDate
+            });
+        }
+        
+        payment.subscription = subscription._id;
+    }
+    if (payment.application) {
+        const Application = (await import('../models/Application.js')).default;
+        await Application.findByIdAndUpdate(payment.application, {
+            status: 'Submitted',
+            submittedAt: Date.now()
+        });
+    }
+
+    await payment.save();
+    return payment;
+};
+
 // @desc    Initiate a Paytm Transaction to get txnToken
 // @route   POST /api/payments/paytm/initiate
 // @access  Private
 export const initiatePaytmPayment = asyncHandler(async (req, res) => {
-    const { amount, programId, semester, type } = req.body;
+    console.log(PAYTM_ENVIRONMENT, "initiate payment")
+    return
+    const { amount, programId, semester, type, planName, durationInDays, applicationId } = req.body;
 
     if (!amount) {
         throw new ApiError(400, 'Amount is required');
     }
+    if (!programId) {
+        throw new ApiError(400, 'Program ID is required for subscriptions');
+    }
     
     let paymentType = type || `Tuition Fee - Sem ${semester || 1}`;
+    
+    // Find or create the plan based on static frontend data
+    let plan = await Plan.findOne({ program: programId, name: planName || paymentType });
+    if (!plan) {
+        plan = await Plan.create({
+            program: programId,
+            name: planName || paymentType,
+            price: amount,
+            durationInDays: durationInDays !== undefined ? durationInDays : 180 // Default to ~6 months
+        });
+    }
 
     const orderId = `ORD_${Date.now()}_${req.user._id.toString().substring(0, 6)}`;
     const custId = req.user._id.toString();
@@ -35,9 +107,9 @@ export const initiatePaytmPayment = asyncHandler(async (req, res) => {
         "mid"           : PAYTM_MID,
         "websiteName"   : PAYTM_WEBSITE,
         "orderId"       : orderId,
-        "callbackUrl"   : `http://localhost:5173/dashboard/programs`, // Using frontend URL for JS Checkout fallback
+        "callbackUrl"   : `http://localhost:8000/api/payments/paytm/callback`,
         "txnAmount"     : {
-            "value"     : amount.toString(),
+            "value"     : Number(amount).toFixed(2),
             "currency"  : "INR",
         },
         "userInfo"      : {
@@ -88,6 +160,7 @@ export const initiatePaytmPayment = asyncHandler(async (req, res) => {
                 await Payment.create({
                     user: req.user._id,
                     application: req.body.applicationId || null,
+                    plan: plan._id,
                     amount: amount,
                     type: paymentType,
                     orderId: orderId, // Reusing field or you can add paytmOrderId to model
@@ -163,11 +236,7 @@ export const verifyPaytmPayment = asyncHandler(async (req, res) => {
             // Validate transaction status securely
             if (resultStatus === 'TXN_SUCCESS') {
                 // Update payment record in database securely
-                const payment = await Payment.findOneAndUpdate(
-                    { orderId: orderId }, // Assume orderId is saved here for now
-                    { status: 'Success' },
-                    { new: true }
-                );
+                const payment = await handleSuccessfulPayment(orderId);
 
                 res.status(200).json(new ApiResponse(200, { paytmResponse: parsedResponse.body, paymentId: payment?._id, status: 'Success' }, "Payment verified as successful"));
             } else if (resultStatus === 'PENDING') {
@@ -217,7 +286,7 @@ export const paytmWebhook = asyncHandler(async (req, res) => {
     
     if (isVerifySignature) {
         if (resultStatus === 'TXN_SUCCESS') {
-            await Payment.findOneAndUpdate({ orderId }, { status: 'Success' });
+            await handleSuccessfulPayment(orderId);
         } else if (resultStatus === 'PENDING') {
             await Payment.findOneAndUpdate({ orderId }, { status: 'Pending' });
         } else {
@@ -227,5 +296,43 @@ export const paytmWebhook = asyncHandler(async (req, res) => {
     } else {
         console.error("Paytm Webhook Signature Verification Failed");
         res.status(400).send("Checksum Mismatch");
+    }
+});
+
+
+// @desc    Paytm Redirect Callback (Standard Form Redirect)
+// @route   POST /api/payments/paytm/callback
+// @access  Public
+export const paytmCallback = asyncHandler(async (req, res) => {
+    const paytmResponse = req.body;
+    const frontendUrl = 'http://localhost:5173';
+    
+    if (!paytmResponse || !paytmResponse.ORDERID) {
+        return res.redirect(`${frontendUrl}/dashboard/programs`);
+    }
+
+    const orderId = paytmResponse.ORDERID;
+    const resultStatus = paytmResponse.STATUS;
+    const checksum = paytmResponse.CHECKSUMHASH;
+
+    delete paytmResponse.CHECKSUMHASH;
+
+    const isVerifySignature = PaytmChecksum.verifySignature(paytmResponse, PAYTM_MERCHANT_KEY, checksum);
+    
+    if (isVerifySignature) {
+        let updatedPayment = null;
+        if (resultStatus === 'TXN_SUCCESS') {
+            updatedPayment = await handleSuccessfulPayment(orderId);
+            if (updatedPayment) {
+                return res.redirect(`${frontendUrl}/dashboard/receipt/${updatedPayment._id}`);
+            }
+        } else if (resultStatus === 'PENDING') {
+            await Payment.findOneAndUpdate({ orderId }, { status: 'Pending' });
+        } else {
+            await Payment.findOneAndUpdate({ orderId }, { status: 'Failed' });
+        }
+        return res.redirect(`${frontendUrl}/dashboard/payments`);
+    } else {
+        return res.redirect(`${frontendUrl}/dashboard/programs?error=checksum_mismatch`);
     }
 });

@@ -11,11 +11,13 @@ import { verifyJWT } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
+import { upload } from '../middlewares/uploadMiddleware.js';
+
 // All application routes require authentication
 router.use(verifyJWT);
 
 // Application endpoints
-router.post('/', createApplication);
+router.post('/', upload.any(), createApplication);
 router.get('/me', getMyApplications);
 router.patch('/:id', updateApplication);
 router.post('/:id/submit', submitApplication);

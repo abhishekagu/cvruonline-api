@@ -46,6 +46,39 @@ const userSchema = new mongoose.Schema(
         myPrograms: [{
             type: String
         }],
+        profileDetails: {
+            salutation: String,
+            middleName: String,
+            gender: String,
+            dob: Date,
+            aadhaarNo: String,
+            fatherName: String,
+            motherName: String,
+            maritalStatus: String,
+            religion: String,
+            casteCategory: String,
+            nationality: String,
+            medium: String,
+            domicileState: String,
+            abcId: String,
+            apaarId: String,
+            debId: String,
+            currentAddress: {
+                fullAddress: String, country: String, state: String, district: String, city: String, pinCode: String
+            },
+            permanentAddress: {
+                fullAddress: String, country: String, state: String, district: String, city: String, pinCode: String
+            },
+            emergencyContact: {
+                name: String, relation: String, contactNo: String, address: String
+            },
+            qualifications: [{
+                level: String, programName: String, specialization: String, institute: String, board: String, passingYear: String, percentage: String, grade: String, enrollmentNumber: String
+            }],
+            documents: [{
+                documentType: String, fileUrl: String
+            }]
+        },
         passwordResetToken: String,
         passwordResetExpires: Date,
     },

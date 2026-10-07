@@ -10,7 +10,17 @@ const paymentSchema = new mongoose.Schema(
         application: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Application',
-            required: false, // Changed from true to allow Paytm payments without application
+            required: false,
+        },
+        subscription: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Subscription',
+            required: false,
+        },
+        plan: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Plan',
+            required: false,
         },
         amount: {
             type: Number,

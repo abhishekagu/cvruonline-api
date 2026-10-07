@@ -9,24 +9,62 @@ import { ApiResponse } from '../utils/apiResponse.js';
 // @access  Private (Applicant)
 export const createApplication = asyncHandler(async (req, res) => {
     const { programId } = req.body;
-
+    
     if (!programId) {
-        throw new ApiError(400, 'Please select a program to apply for.');
+        throw new ApiError(400, "programId is required");
     }
 
-    // Check if user already has an application for this program
-    const existing = await Application.findOne({ user: req.user._id, program: programId });
-    if (existing) {
-        throw new ApiError(400, 'You already have an application for this program.');
-    }
+    const user = req.user;
+    const profile = user.profileDetails || {};
 
-    const application = await Application.create({
-        user: req.user._id,
+    // Find or create application
+    let application = await Application.findOne({ user: user._id, program: programId });
+    
+    const applicationData = {
+        user: user._id,
         program: programId,
         status: 'Draft',
-    });
+        basicDetails: {
+            salutation: profile.salutation,
+            firstName: user.firstName,
+            middleName: profile.middleName,
+            lastName: user.lastName,
+            gender: profile.gender,
+            dob: profile.dob,
+            mobileNo: user.phone,
+            email: user.email,
+            aadhaarNo: profile.aadhaarNo,
+            fatherName: profile.fatherName,
+            motherName: profile.motherName,
+        },
+        otherDetails: {
+            maritalStatus: profile.maritalStatus,
+            religion: profile.religion,
+            casteCategory: profile.casteCategory,
+            nationality: profile.nationality,
+            medium: profile.medium,
+            domicileState: profile.domicileState,
+            abcId: profile.abcId,
+            apaarId: profile.apaarId,
+            debId: profile.debId,
+        },
+        currentAddress: profile.currentAddress || {},
+        permanentAddress: profile.permanentAddress || {},
+        emergencyContact: profile.emergencyContact || {},
+        qualifications: profile.qualifications || [],
+        documents: profile.documents || []
+    };
 
-    res.status(201).json(new ApiResponse(201, { application }, 'Draft application initialized.'));
+    if (application) {
+        // Update existing application
+        Object.assign(application, applicationData);
+        await application.save();
+    } else {
+        // Create new application
+        application = await Application.create(applicationData);
+    }
+
+    res.status(200).json(new ApiResponse(200, { application }, 'Draft application created from profile.'));
 });
 
 // @desc    Get user's applications

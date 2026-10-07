@@ -8,8 +8,7 @@ const applicationSchema = new mongoose.Schema(
             required: true,
         },
         program: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Program',
+            type: String, // String to match frontend IDs
             required: true,
         },
         status: {
@@ -17,35 +16,69 @@ const applicationSchema = new mongoose.Schema(
             enum: ['Draft', 'Submitted', 'Under Review', 'Accepted', 'Rejected'],
             default: 'Draft',
         },
-        // Step 1: Personal Details
-        personalDetails: {
+        basicDetails: {
+            salutation: String,
+            firstName: String,
+            middleName: String,
+            lastName: String,
+            gender: String,
+            dob: Date,
+            mobileNo: String,
+            email: String,
+            aadhaarNo: String,
             fatherName: String,
             motherName: String,
-            dateOfBirth: Date,
-            gender: {
-                type: String,
-                enum: ['Male', 'Female', 'Other'],
-            },
-            category: String, // General, OBC, SC, ST
-            nationality: { type: String, default: 'Indian' },
         },
-        // Step 2: Address
-        address: {
-            street: String,
-            city: String,
+        otherDetails: {
+            maritalStatus: String,
+            religion: String,
+            casteCategory: String,
+            nationality: String,
+            medium: String,
+            domicileState: String,
+            abcId: String,
+            apaarId: String,
+            debId: String,
+        },
+        currentAddress: {
+            fullAddress: String,
+            country: String,
             state: String,
-            pincode: String,
-            country: { type: String, default: 'India' },
+            district: String,
+            city: String,
+            pinCode: String,
         },
-        // Step 3: Academic Qualifications
-        academics: [
+        permanentAddress: {
+            fullAddress: String,
+            country: String,
+            state: String,
+            district: String,
+            city: String,
+            pinCode: String,
+        },
+        emergencyContact: {
+            name: String,
+            relation: String,
+            contactNo: String,
+            address: String,
+        },
+        qualifications: [
             {
-                qualificationLevel: String, // e.g., '10th', '12th', 'UG'
-                boardOrUniversity: String,
-                yearOfPassing: Number,
-                percentageOrCGPA: Number,
+                level: String,
+                programName: String,
+                specialization: String,
+                institute: String,
+                board: String,
+                passingYear: String,
+                percentage: String,
+                grade: String,
+                enrollmentNumber: String,
             }
         ],
+        documents: [{
+            documentType: String,
+            fileUrl: String,
+        }],
         submittedAt: {
             type: Date,
         }

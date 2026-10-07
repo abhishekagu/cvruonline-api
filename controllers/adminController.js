@@ -153,6 +153,17 @@ export const getUserById = asyncHandler(async (req, res) => {
         throw new ApiError(404, 'User not found');
     }
 
-    res.status(200).json(new ApiResponse(200, { user }, 'User details fetched successfully'));
+    const applications = await Application.find({ user: user._id });
+    
+    // Attempt to fetch subscriptions if the model is available
+    let subscriptions = [];
+    try {
+        const Subscription = (await import('../models/Subscription.js')).default;
+        subscriptions = await Subscription.find({ user: user._id }).populate('plan');
+    } catch (err) {
+        console.error("Could not fetch subscriptions", err);
+    }
+
+    res.status(200).json(new ApiResponse(200, { user, applications, subscriptions }, 'User details fetched successfully'));
 });
 

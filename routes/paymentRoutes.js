@@ -1,12 +1,15 @@
 import express from 'express';
 import { getUserPayments, getAllPayments, getPaymentById } from '../controllers/paymentController.js';
-import { initiatePaytmPayment, verifyPaytmPayment, paytmWebhook } from '../controllers/paytmController.js';
+import { initiatePaytmPayment, verifyPaytmPayment, paytmWebhook, paytmCallback } from '../controllers/paytmController.js';
 import { verifyJWT, restrictTo } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
 // Paytm Webhook (Public)
 router.post('/paytm/webhook', paytmWebhook);
+
+// Paytm Callback (Public)
+router.post('/paytm/callback', paytmCallback);
 
 router.use(verifyJWT);
 
