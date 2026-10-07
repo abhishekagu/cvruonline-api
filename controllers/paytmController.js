@@ -15,6 +15,8 @@ const PAYTM_ENVIRONMENT = process.env.NODE_ENV === 'production'
     : 'securegw-stage.paytm.in';
 const PAYTM_WEBSITE = process.env.NODE_ENV === 'production' ? 'DEFAULT' : 'WEBSTAGING';
 
+    const frontend_url = process.env.FRONTEND_URL || "https://cvru.ac.in/cvruonline/";
+
 const handleSuccessfulPayment = async (orderId) => {
     const payment = await Payment.findOne({ orderId }).populate('plan');
     if (!payment) return null;
@@ -73,8 +75,6 @@ const handleSuccessfulPayment = async (orderId) => {
 // @route   POST /api/payments/paytm/initiate
 // @access  Private
 export const initiatePaytmPayment = asyncHandler(async (req, res) => {
-    console.log(PAYTM_ENVIRONMENT, "initiate payment")
-    return
     const { amount, programId, semester, type, planName, durationInDays, applicationId } = req.body;
 
     if (!amount) {
@@ -305,7 +305,7 @@ export const paytmWebhook = asyncHandler(async (req, res) => {
 // @access  Public
 export const paytmCallback = asyncHandler(async (req, res) => {
     const paytmResponse = req.body;
-    const frontendUrl = 'http://localhost:5173';
+    const frontendUrl = frontend_url;
     
     if (!paytmResponse || !paytmResponse.ORDERID) {
         return res.redirect(`${frontendUrl}/dashboard/programs`);
