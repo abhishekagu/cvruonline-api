@@ -1,6 +1,6 @@
-# LPU Online - API Documentation
+# CVRU Online - API Documentation
 
-This document serves as a reference for frontend developers to integrate with the LPU Online Clone backend. All API responses follow a standardized format.
+This document serves as a reference for frontend developers to integrate with the CVRU Online Clone backend. All API responses follow a standardized format.
 
 ## Base URL
 \`http://localhost:8000/api/v1\`
@@ -112,7 +112,7 @@ All error responses will follow this structure:
 ```json
 {
   "status": "success",
-  "message": "LPU Online API is running!"
+  "message": "CVRU Online API is running!"
 }
 ```
 
@@ -261,7 +261,7 @@ Authorization: Bearer <admin_jwt_token>
   "statusCode": 201,
   "data": {
     "lead": { ... },
-    "prospectusUrl": "https://lpu-online-mock-bucket.s3.amazonaws.com/LPU-Online-Prospectus-2026.pdf"
+    "prospectusUrl": "https://CVRU-online-mock-bucket.s3.amazonaws.com/CVRU-Online-Prospectus-2026.pdf"
   },
   "message": "Lead captured. Prospectus is ready to download.",
   "success": true

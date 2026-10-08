@@ -16,13 +16,27 @@ const PAYTM_WEBSITE = process.env.NODE_ENV === 'production' ? 'DEFAULT' : 'WEBST
 const frontend_url = process.env.FRONTEND_URL || "https://cvru.ac.in/cvruonline";
 const CALLBACK_URL_VAR = process.env.PROD_CALLBACK_URL || "https://cvru.ac.in/cvruonline/"
 
-const handleSuccessfulPayment = async (orderId) => {
+const handleSuccessfulPayment = async (orderId, txnId, bankTxnId) => {
     const payment = await Payment.findOne({ orderId }).populate('plan');
     if (!payment) return null;
     
-    if (payment.status === 'Success') return payment;
+    if (payment.status === 'Success') {
+        let updated = false;
+        if (txnId && !payment.transactionId) {
+            payment.transactionId = txnId;
+            updated = true;
+        }
+        if (bankTxnId && !payment.bankTransactionId) {
+            payment.bankTransactionId = bankTxnId;
+            updated = true;
+        }
+        if (updated) await payment.save();
+        return payment;
+    }
 
     payment.status = 'Success';
+    if (txnId) payment.transactionId = txnId;
+    if (bankTxnId) payment.bankTransactionId = bankTxnId;
 
     if (payment.plan) {
         const plan = payment.plan;
@@ -96,7 +110,7 @@ export const initiatePaytmPayment = asyncHandler(async (req, res) => {
         });
     }
 
-    const orderId = `ORD_${Date.now()}_${req.user._id.toString().substring(0, 6)}`;
+    const orderId = `ORD${Date.now()}${req.user._id.toString().substring(0, 6)?.toUpperCase()}`;
     const custId = req.user._id.toString();
 
     var paytmParams = {};
@@ -231,24 +245,26 @@ export const verifyPaytmPayment = asyncHandler(async (req, res) => {
         post_res.on('end', async function(){
             const parsedResponse = JSON.parse(response);
             const resultStatus = parsedResponse.body.resultInfo.resultStatus;
+            const txnId = parsedResponse.body.txnId;
+            const bankTxnId = parsedResponse.body.bankTxnId;
             
             // Validate transaction status securely
             if (resultStatus === 'TXN_SUCCESS') {
                 // Update payment record in database securely
-                const payment = await handleSuccessfulPayment(orderId);
+                const payment = await handleSuccessfulPayment(orderId, txnId, bankTxnId);
 
                 res.status(200).json(new ApiResponse(200, { paytmResponse: parsedResponse.body, paymentId: payment?._id, status: 'Success' }, "Payment verified as successful"));
             } else if (resultStatus === 'PENDING') {
                 const payment = await Payment.findOneAndUpdate(
                     { orderId: orderId },
-                    { status: 'Pending' },
+                    { status: 'Pending', transactionId: txnId, bankTransactionId: bankTxnId },
                     { new: true }
                 );
                 res.status(200).json(new ApiResponse(200, { paytmResponse: parsedResponse.body, paymentId: payment?._id, status: 'Pending' }, "Payment is pending"));
             } else {
                 const payment = await Payment.findOneAndUpdate(
                     { orderId: orderId },
-                    { status: 'Failed' },
+                    { status: 'Failed', transactionId: txnId, bankTransactionId: bankTxnId },
                     { new: true }
                 );
                 res.status(400).json(new ApiResponse(400, { paytmResponse: parsedResponse.body, paymentId: payment?._id, status: 'Failed' }, "Payment verification failed"));
@@ -285,11 +301,11 @@ export const paytmWebhook = asyncHandler(async (req, res) => {
     
     if (isVerifySignature) {
         if (resultStatus === 'TXN_SUCCESS') {
-            await handleSuccessfulPayment(orderId);
+            await handleSuccessfulPayment(orderId, paytmResponse.TXNID, paytmResponse.BANKTXNID);
         } else if (resultStatus === 'PENDING') {
-            await Payment.findOneAndUpdate({ orderId }, { status: 'Pending' });
+            await Payment.findOneAndUpdate({ orderId }, { status: 'Pending', transactionId: paytmResponse.TXNID, bankTransactionId: paytmResponse.BANKTXNID });
         } else {
-            await Payment.findOneAndUpdate({ orderId }, { status: 'Failed' });
+            await Payment.findOneAndUpdate({ orderId }, { status: 'Failed', transactionId: paytmResponse.TXNID, bankTransactionId: paytmResponse.BANKTXNID });
         }
         res.status(200).send("OK");
     } else {
@@ -321,15 +337,18 @@ export const paytmCallback = asyncHandler(async (req, res) => {
     if (isVerifySignature) {
         let updatedPayment = null;
         if (resultStatus === 'TXN_SUCCESS') {
-            updatedPayment = await handleSuccessfulPayment(orderId);
+            updatedPayment = await handleSuccessfulPayment(orderId, paytmResponse.TXNID, paytmResponse.BANKTXNID);
             if (updatedPayment) {
                 return res.redirect(`${frontendUrl}/dashboard/receipt/${updatedPayment._id}`);
             }
         } else if (resultStatus === 'PENDING') {
-            await Payment.findOneAndUpdate({ orderId }, { status: 'Pending' });
+            updatedPayment = await Payment.findOneAndUpdate({ orderId }, { status: 'Pending', transactionId: paytmResponse.TXNID, bankTransactionId: paytmResponse.BANKTXNID }, { new: true });
+            return res.redirect(`${frontendUrl}/dashboard/receipt/${updatedPayment._id}`);
         } else {
-            await Payment.findOneAndUpdate({ orderId }, { status: 'Failed' });
+            updatedPayment = await Payment.findOneAndUpdate({ orderId }, { status: 'Failed', transactionId: paytmResponse.TXNID, bankTransactionId: paytmResponse.BANKTXNID }, { new: true });
+            return res.redirect(`${frontendUrl}/dashboard/receipt/${updatedPayment._id}`);
         }
+        
         return res.redirect(`${frontendUrl}/dashboard/payments`);
     } else {
         return res.redirect(`${frontendUrl}/dashboard/programs?error=checksum_mismatch`);

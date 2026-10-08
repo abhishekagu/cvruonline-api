@@ -37,6 +37,9 @@ const paymentSchema = new mongoose.Schema(
         transactionId: {
             type: String,
         },
+        bankTransactionId: {
+            type: String,
+        },
         signature: {
             type: String,
         },

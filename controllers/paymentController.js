@@ -33,7 +33,8 @@ export const getAllPayments = asyncHandler(async (req, res) => {
 export const getPaymentById = asyncHandler(async (req, res) => {
     const payment = await Payment.findById(req.params.id)
         .populate('user', 'firstName lastName email phoneNumber')
-        .populate('application');
+        .populate('application')
+        .populate('plan');
 
     if (!payment) {
         throw new ApiError(404, 'Payment not found');

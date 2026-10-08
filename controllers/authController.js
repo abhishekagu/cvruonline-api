@@ -5,7 +5,7 @@ import { ApiError } from '../utils/apiError.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 
 const signToken = (id) => {
-    return jwt.sign({ id }, process.env.JWT_SECRET || 'super-secret-default-key-for-lpu-online-clone-must-change', {
+    return jwt.sign({ id }, process.env.JWT_SECRET || 'super-secret-default-key-for-cvru-online-must-change', {
         expiresIn: process.env.JWT_EXPIRES_IN || '90d',
     });
 };

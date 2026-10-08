@@ -22,7 +22,7 @@ export const captureProspectusLead = asyncHandler(async (req, res) => {
     // using a service like AWS SES, SendGrid, or Nodemailer.
     
     // For now, return success and a mock prospectus download URL
-    const prospectusUrl = "https://lpu-online-mock-bucket.s3.amazonaws.com/LPU-Online-Prospectus-2026.pdf";
+    const prospectusUrl = "https://cvru-online-mock-bucket.s3.amazonaws.com/CVRU-Online-Prospectus-2026.pdf";
 
     res.status(201).json(
         new ApiResponse(201, { lead, prospectusUrl }, 'Lead captured. Prospectus is ready to download.')

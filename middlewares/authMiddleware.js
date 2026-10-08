@@ -22,7 +22,7 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
         // 2. Verify token
         const decoded = jwt.verify(
             token,
-            process.env.JWT_SECRET || 'super-secret-default-key-for-lpu-online-clone-must-change'
+            process.env.JWT_SECRET || 'super-secret-default-key-for-cvru-online-must-change'
         );
 
         // 3. Check if user still exists

@@ -2,6 +2,12 @@ import User from '../models/User.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/apiError.js';
 import { ApiResponse } from '../utils/apiResponse.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // @desc    Get user's bookmarked programs
 // @route   GET /api/users/my-programs
@@ -115,6 +121,20 @@ export const updateUserProfile = asyncHandler(async (req, res) => {
             };
             const existingIndex = documentArray.findIndex(d => d.documentType === newDoc.documentType);
             if (existingIndex > -1) {
+                // Delete old file if it exists
+                try {
+                    const oldFileUrl = documentArray[existingIndex].fileUrl;
+                    if (oldFileUrl) {
+                        const oldFilename = oldFileUrl.split('/').pop();
+                        const oldFilePath = path.join(__dirname, '..', 'uploads', oldFilename);
+                        if (fs.existsSync(oldFilePath)) {
+                            fs.unlinkSync(oldFilePath);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error deleting old file:', error);
+                }
+                
                 documentArray[existingIndex] = newDoc;
             } else {
                 documentArray.push(newDoc);
