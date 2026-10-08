@@ -10,12 +10,11 @@ import { ApiResponse } from '../utils/apiResponse.js';
 // Setup Paytm Constants
 const PAYTM_MID = process.env.PAYTM_MID || 'YOUR_TEST_MID';
 const PAYTM_MERCHANT_KEY = process.env.PAYTM_MERCHANT_KEY || 'YOUR_TEST_KEY';
-const PAYTM_ENVIRONMENT = process.env.NODE_ENV === 'production' 
-    ? 'securegw.paytm.in' 
-    : 'securegw-stage.paytm.in';
+const PAYTM_ENVIRONMENT = process.env.NODE_ENV === 'production' ? 'securegw.paytm.in' : 'securegw-stage.paytm.in';
 const PAYTM_WEBSITE = process.env.NODE_ENV === 'production' ? 'DEFAULT' : 'WEBSTAGING';
 
-    const frontend_url = process.env.FRONTEND_URL || "https://cvru.ac.in/cvruonline/";
+const frontend_url = process.env.FRONTEND_URL || "https://cvru.ac.in/cvruonline";
+const CALLBACK_URL_VAR = process.env.PROD_CALLBACK_URL || "https://cvru.ac.in/cvruonline/"
 
 const handleSuccessfulPayment = async (orderId) => {
     const payment = await Payment.findOne({ orderId }).populate('plan');
@@ -107,7 +106,7 @@ export const initiatePaytmPayment = asyncHandler(async (req, res) => {
         "mid"           : PAYTM_MID,
         "websiteName"   : PAYTM_WEBSITE,
         "orderId"       : orderId,
-        "callbackUrl"   : `http://localhost:8000/api/payments/paytm/callback`,
+        "callbackUrl"   : `${CALLBACK_URL_VAR}api/payments/paytm/callback`,
         "txnAmount"     : {
             "value"     : Number(amount).toFixed(2),
             "currency"  : "INR",
