@@ -61,3 +61,22 @@ export const login = asyncHandler(async (req, res) => {
 
     createSendToken(user, 200, res, 'Logged in successfully');
 });
+
+export const changePassword = asyncHandler(async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+        throw new ApiError(400, 'Please provide both old and new passwords');
+    }
+
+    const user = await User.findById(req.user._id).select('+password');
+
+    if (!user || !(await user.comparePassword(oldPassword, user.password))) {
+        throw new ApiError(401, 'Incorrect old password');
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.status(200).json(new ApiResponse(200, {}, 'Password changed successfully'));
+});
