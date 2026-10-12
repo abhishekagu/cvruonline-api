@@ -131,6 +131,40 @@ export const getContacts = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(200, { contacts }, 'Contacts fetched successfully'));
 });
 
+// @desc    Update contact inquiry status
+// @route   PATCH /api/v1/admin/contacts/:id/status
+// @access  Private (Admin)
+export const updateContactStatus = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const allowedStatuses = ['New', 'Reviewed', 'Replied'];
+    if (!status || !allowedStatuses.includes(status)) {
+        throw new ApiError(400, `Invalid status. Must be one of: ${allowedStatuses.join(', ')}`);
+    }
+
+    const contact = await Contact.findByIdAndUpdate(id, { status }, { new: true });
+    if (!contact) {
+        throw new ApiError(404, 'Contact inquiry not found');
+    }
+
+    res.status(200).json(new ApiResponse(200, { contact }, `Inquiry marked as ${status}`));
+});
+
+// @desc    Delete contact inquiry
+// @route   DELETE /api/v1/admin/contacts/:id
+// @access  Private (Admin)
+export const deleteContact = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const contact = await Contact.findByIdAndDelete(id);
+    if (!contact) {
+        throw new ApiError(404, 'Contact inquiry not found');
+    }
+
+    res.status(200).json(new ApiResponse(200, null, 'Contact inquiry deleted successfully'));
+});
+
+
 // @desc    Get all users (with optional filtering and pagination)
 // @route   GET /api/v1/admin/users
 // @access  Private (Admin)

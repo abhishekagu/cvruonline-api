@@ -5,6 +5,8 @@ import {
     verifyDocument,
     getDashboardMetrics,
     getContacts,
+    updateContactStatus,
+    deleteContact,
     getAllUsers,
     getUserById,
     lookupEnrollmentForPayment,
@@ -38,5 +40,7 @@ router.get('/dashboard/metrics', getDashboardMetrics);
 
 // Contact Inquiries
 router.get('/contacts', getContacts);
+router.patch('/contacts/:id/status', updateContactStatus);
+router.delete('/contacts/:id', deleteContact);
 
 export default router;
