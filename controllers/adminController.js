@@ -83,21 +83,30 @@ export const getDashboardMetrics = asyncHandler(async (req, res) => {
     const totalApplications = await Application.countDocuments({ status: { $ne: 'Draft' } });
     const totalLeads = await Lead.countDocuments();
     const acceptedApplications = await Application.countDocuments({ status: 'Accepted' });
+    const pendingApplications = await Application.countDocuments({ status: { $in: ['Submitted', 'Under Review'] } });
 
     // Fetch 5 most recent applications
     const recentApplications = await Application.find({ status: { $ne: 'Draft' } })
+        .populate('user', 'firstName lastName email phone')
+        .populate('program', 'name code')
+        .sort('-createdAt')
+        .limit(5);
+
+    // Fetch 5 most recent successful payments
+    const recentPayments = await Payment.find({ status: 'Success' })
         .populate('user', 'firstName lastName email')
-        .populate('program', 'name')
+        .populate('application', 'enrollmentNumber program')
         .sort('-createdAt')
         .limit(5);
 
     // Calculate actual total revenue from successful payments
     const revenueResult = await Payment.aggregate([
         { $match: { status: 'Success' } },
-        { $group: { _id: null, totalRevenue: { $sum: '$amount' } } }
+        { $group: { _id: null, totalRevenue: { $sum: '$amount' }, totalTransactions: { $sum: 1 } } }
     ]);
     
     const totalRevenue = revenueResult.length > 0 ? revenueResult[0].totalRevenue : 0;
+    const totalTransactions = revenueResult.length > 0 ? revenueResult[0].totalTransactions : 0;
 
     res.status(200).json(new ApiResponse(200, {
         metrics: {
@@ -105,8 +114,11 @@ export const getDashboardMetrics = asyncHandler(async (req, res) => {
             totalApplications,
             totalLeads,
             acceptedApplications,
+            pendingApplications,
             totalRevenue,
-            recentApplications
+            totalTransactions,
+            recentApplications,
+            recentPayments
         }
     }, 'Dashboard metrics fetched successfully'));
 });
@@ -171,5 +183,237 @@ export const getUserById = asyncHandler(async (req, res) => {
     }
 
     res.status(200).json(new ApiResponse(200, { user, applications, subscriptions }, 'User details fetched successfully'));
+});
+
+const PROGRAM_FEES = {
+    bba: 22000,
+    bca: 100,
+    blibisc: 22500,
+    mba: 42000,
+    ma_english: 21700
+};
+
+const PROGRAM_NAMES = {
+    bba: 'Bachelor of Business Administration (BBA)',
+    bca: 'Bachelor of Computer Applications (BCA)',
+    blibisc: 'Bachelor of Library and Information Science (B.Lib.I.Sc.)',
+    mba: 'Master of Business Administration (MBA)',
+    ma_english: 'Master of Arts in English'
+};
+
+// @desc    Lookup student & application by enrollment number for offline payment
+// @route   GET /api/v1/admin/payments/lookup-enrollment
+// @access  Private (Admin)
+export const lookupEnrollmentForPayment = asyncHandler(async (req, res) => {
+    const { enrollmentNumber } = req.query;
+
+    if (!enrollmentNumber || !enrollmentNumber.trim()) {
+        throw new ApiError(400, "Enrollment number is required");
+    }
+
+    const cleanEnrollment = enrollmentNumber.trim();
+    const regex = new RegExp(`^${cleanEnrollment}$`, 'i');
+
+    // 1. Try finding application directly by enrollmentNumber
+    let application = await Application.findOne({ enrollmentNumber: regex })
+        .populate('user', 'firstName lastName email phone enrollmentNo');
+
+    // 2. If not found, check User model's enrollmentNo
+    if (!application) {
+        const user = await User.findOne({ enrollmentNo: regex });
+        if (user) {
+            application = await Application.findOne({ user: user._id })
+                .populate('user', 'firstName lastName email phone enrollmentNo')
+                .sort('-createdAt');
+        }
+    }
+
+    if (!application) {
+        throw new ApiError(404, `No student or application found matching enrollment number "${cleanEnrollment}".`);
+    }
+
+    const programKey = (application.program || '').toLowerCase();
+    const totalFee = Number(application.totalFee) || PROGRAM_FEES[programKey] || 22000;
+    const paidAmount = Number(application.paidAmount) || 0;
+    const remainingBalance = application.remainingBalance !== undefined 
+        ? Number(application.remainingBalance) 
+        : Math.max(0, totalFee - paidAmount);
+
+    res.status(200).json(new ApiResponse(200, {
+        applicationId: application._id,
+        enrollmentNumber: application.enrollmentNumber || application.user?.enrollmentNo || cleanEnrollment,
+        user: {
+            id: application.user?._id,
+            firstName: application.user?.firstName || application.basicDetails?.firstName,
+            lastName: application.user?.lastName || application.basicDetails?.lastName,
+            email: application.user?.email || application.basicDetails?.email,
+            phone: application.user?.phone || application.basicDetails?.mobileNo
+        },
+        program: {
+            id: programKey,
+            name: PROGRAM_NAMES[programKey] || application.program?.toUpperCase() || 'Degree Program'
+        },
+        financials: {
+            totalFee,
+            paidAmount,
+            remainingBalance,
+            paymentStatus: application.paymentStatus || (remainingBalance === 0 ? 'Success' : 'Pending'),
+            status: application.status
+        }
+    }, 'Student enrollment record fetched successfully'));
+});
+
+// @desc    Record offline / cash payment against student enrollment number
+// @route   POST /api/v1/admin/payments/offline
+// @access  Private (Admin)
+export const recordOfflinePayment = asyncHandler(async (req, res) => {
+    const { 
+        enrollmentNumber, 
+        amount, 
+        paymentMode, 
+        referenceNumber, 
+        paymentType, 
+        remarks 
+    } = req.body;
+
+    if (!enrollmentNumber || !enrollmentNumber.trim()) {
+        throw new ApiError(400, "Enrollment number is required");
+    }
+
+    const numAmount = Number(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+        throw new ApiError(400, "A valid payment amount greater than 0 is required");
+    }
+
+    const cleanEnrollment = enrollmentNumber.trim();
+    const regex = new RegExp(`^${cleanEnrollment}$`, 'i');
+
+    // Find application
+    let application = await Application.findOne({ enrollmentNumber: regex })
+        .populate('user', 'firstName lastName email phone enrollmentNo');
+
+    if (!application) {
+        const user = await User.findOne({ enrollmentNo: regex });
+        if (user) {
+            application = await Application.findOne({ user: user._id })
+                .populate('user', 'firstName lastName email phone enrollmentNo')
+                .sort('-createdAt');
+        }
+    }
+
+    if (!application) {
+        throw new ApiError(404, `No application found for enrollment number "${cleanEnrollment}".`);
+    }
+
+    const programKey = (application.program || '').toLowerCase();
+    const resolvedTotalFee = Number(application.totalFee) || PROGRAM_FEES[programKey] || 22000;
+    const currentPaid = Number(application.paidAmount) || 0;
+    const currentRemaining = application.remainingBalance !== undefined 
+        ? Number(application.remainingBalance) 
+        : Math.max(0, resolvedTotalFee - currentPaid);
+
+    if (currentRemaining <= 0) {
+        throw new ApiError(400, "All tuition fees for this student have already been cleared in full (Remaining balance is ₹0).");
+    }
+
+    if (numAmount > currentRemaining) {
+        throw new ApiError(400, `Payment amount (₹${numAmount.toLocaleString('en-IN')}) cannot exceed the pending balance of ₹${currentRemaining.toLocaleString('en-IN')}.`);
+    }
+
+    const newPaidAmount = currentPaid + numAmount;
+    const newRemainingBalance = Math.max(0, resolvedTotalFee - newPaidAmount);
+    const newPaymentStatus = newRemainingBalance === 0 ? 'Success' : 'Partial';
+
+    // Ensure enrollment number is assigned
+    if (!application.enrollmentNumber) {
+        application.enrollmentNumber = cleanEnrollment;
+    }
+    if (application.user && !application.user.enrollmentNo) {
+        await User.findByIdAndUpdate(application.user._id, { enrollmentNo: cleanEnrollment });
+    }
+
+    // Update application
+    application.totalFee = resolvedTotalFee;
+    application.paidAmount = newPaidAmount;
+    application.remainingBalance = newRemainingBalance;
+    application.paymentStatus = newPaymentStatus;
+    application.paymentType = paymentType || `Offline Payment (${paymentMode || 'Cash'})`;
+    if (application.status === 'Draft' || !application.status) {
+        application.status = 'Submitted';
+    }
+    await application.save();
+
+    // Generate unique order and transaction IDs
+    const timestamp = Date.now();
+    const generatedVoucher = `CVRU-REC-${timestamp.toString().slice(-6)}`;
+    const orderId = `ADMIN-OFFL-${timestamp}`;
+    const transactionId = referenceNumber?.trim() || generatedVoucher;
+
+    // Create Payment Record
+    const payment = await Payment.create({
+        user: application.user._id,
+        application: application._id,
+        amount: numAmount,
+        currency: 'INR',
+        orderId,
+        transactionId,
+        bankTransactionId: `${paymentMode || 'Cash'} / ADMIN_COLLECTION${remarks ? ` - ${remarks}` : ''}`,
+        status: 'Success',
+        type: paymentType || `Offline Payment (${paymentMode || 'Cash'})`
+    });
+
+    // Create or update subscription
+    try {
+        const Plan = (await import('../models/Plan.js')).default;
+        const Subscription = (await import('../models/Subscription.js')).default;
+
+        let plan = await Plan.findOne({ program: programKey, name: paymentType || 'Tuition Fee' });
+        if (!plan) {
+            plan = await Plan.create({
+                program: programKey,
+                name: paymentType || 'Offline Tuition Fee',
+                price: numAmount,
+                durationInDays: 180
+            });
+        }
+
+        let subscription = await Subscription.findOne({ user: application.user._id, program: programKey });
+        const expiryDate = new Date();
+        expiryDate.setDate(expiryDate.getDate() + 180);
+
+        if (subscription) {
+            subscription.plan = plan._id;
+            subscription.status = 'Active';
+            subscription.expiryDate = expiryDate;
+            await subscription.save();
+        } else {
+            await Subscription.create({
+                user: application.user._id,
+                plan: plan._id,
+                program: programKey,
+                status: 'Active',
+                expiryDate
+            });
+        }
+    } catch (subErr) {
+        console.error("Subscription activation notice:", subErr.message);
+    }
+
+    // Return populated payment and updated application
+    const populatedPayment = await Payment.findById(payment._id)
+        .populate('user', 'firstName lastName email phone enrollmentNo')
+        .populate('application');
+
+    res.status(201).json(new ApiResponse(201, {
+        payment: populatedPayment,
+        application: {
+            id: application._id,
+            enrollmentNumber: application.enrollmentNumber,
+            totalFee: resolvedTotalFee,
+            paidAmount: newPaidAmount,
+            remainingBalance: newRemainingBalance,
+            paymentStatus: newPaymentStatus
+        }
+    }, `Offline payment of ₹${numAmount} successfully recorded for enrollment number ${cleanEnrollment}`));
 });
 

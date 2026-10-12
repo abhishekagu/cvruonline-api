@@ -6,7 +6,9 @@ import {
     getDashboardMetrics,
     getContacts,
     getAllUsers,
-    getUserById
+    getUserById,
+    lookupEnrollmentForPayment,
+    recordOfflinePayment
 } from '../controllers/adminController.js';
 import { verifyJWT, restrictTo } from '../middlewares/authMiddleware.js';
 
@@ -15,6 +17,10 @@ const router = express.Router();
 // All admin routes require admin privileges
 router.use(verifyJWT);
 router.use(restrictTo('admin', 'superadmin', 'super-admin'));
+
+// Offline Payment Collection
+router.get('/payments/lookup-enrollment', lookupEnrollmentForPayment);
+router.post('/payments/offline', recordOfflinePayment);
 
 // Users Management
 router.get('/users', getAllUsers);
