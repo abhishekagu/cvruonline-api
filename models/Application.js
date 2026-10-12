@@ -81,6 +81,33 @@ const applicationSchema = new mongoose.Schema(
         }],
         submittedAt: {
             type: Date,
+        },
+        totalFee: {
+            type: Number,
+            default: 0,
+        },
+        paidAmount: {
+            type: Number,
+            default: 0,
+        },
+        remainingBalance: {
+            type: Number,
+            default: 0,
+        },
+        paymentStatus: {
+            type: String,
+            enum: ['Pending', 'Partial', 'Paid', 'Success'],
+            default: 'Pending',
+        },
+        paymentType: {
+            type: String,
+            default: '',
+        },
+        enrollmentNumber: {
+            type: String,
+            trim: true,
+            sparse: true,
+            index: true,
         }
     },
     {

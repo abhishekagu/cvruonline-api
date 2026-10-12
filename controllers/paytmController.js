@@ -72,12 +72,53 @@ const handleSuccessfulPayment = async (orderId, txnId, bankTxnId) => {
         
         payment.subscription = subscription._id;
     }
+    const Application = (await import('../models/Application.js')).default;
+    const User = (await import('../models/User.js')).default;
+    const { generateEnrollmentNumber } = await import('../utils/enrollmentGenerator.js');
+
+    let app = null;
     if (payment.application) {
-        const Application = (await import('../models/Application.js')).default;
-        await Application.findByIdAndUpdate(payment.application, {
-            status: 'Submitted',
-            submittedAt: Date.now()
+        app = await Application.findById(payment.application);
+    } else {
+        // Fallback: look for application by user
+        app = await Application.findOne({ user: payment.user });
+    }
+
+    if (app) {
+        const PROGRAM_FEES = { bba: 22000, bca: 100, blibisc: 22500, mba: 42000, ma_english: 21700 };
+        const totalFee = app.totalFee || PROGRAM_FEES[app.program] || 22000;
+
+        // Find all successful payments for this application
+        const successfulPayments = await Payment.find({
+            user: payment.user,
+            application: app._id,
+            status: 'Success'
         });
+
+        const currentIncluded = successfulPayments.some(p => p._id.toString() === payment._id.toString());
+        let totalPaid = successfulPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        if (!currentIncluded) {
+            totalPaid += Number(payment.amount) || 0;
+        }
+
+        const remainingBalance = Math.max(0, totalFee - totalPaid);
+        const paymentStatus = remainingBalance === 0 ? 'Success' : 'Partial';
+
+        // Generate enrollment number if not already assigned
+        if (!app.enrollmentNumber) {
+            const enrollmentNo = await generateEnrollmentNumber(app.program);
+            app.enrollmentNumber = enrollmentNo;
+            await User.findByIdAndUpdate(payment.user, { enrollmentNo });
+        }
+
+        app.totalFee = totalFee;
+        app.paidAmount = totalPaid;
+        app.remainingBalance = remainingBalance;
+        app.paymentStatus = paymentStatus;
+        app.paymentType = payment.type || 'Registration Fee';
+        app.status = 'Submitted';
+        app.submittedAt = app.submittedAt || Date.now();
+        await app.save();
     }
 
     await payment.save();

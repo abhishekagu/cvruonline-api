@@ -46,6 +46,11 @@ const userSchema = new mongoose.Schema(
         myPrograms: [{
             type: String
         }],
+        enrollmentNo: {
+            type: String,
+            trim: true,
+            sparse: true,
+        },
         profileDetails: {
             salutation: String,
             middleName: String,

@@ -7,6 +7,7 @@ import Contact from '../models/Contact.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/apiError.js';
 import { ApiResponse } from '../utils/apiResponse.js';
+import { generateEnrollmentNumber } from '../utils/enrollmentGenerator.js';
 
 // @desc    Get all submitted applications with filters
 // @route   GET /api/v1/admin/applications
@@ -36,13 +37,18 @@ export const updateApplicationStatus = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'Invalid status update');
     }
 
-    const application = await Application.findByIdAndUpdate(
-        req.params.id,
-        { status },
-        { new: true, runValidators: true }
-    );
-
+    let application = await Application.findById(req.params.id);
     if (!application) throw new ApiError(404, 'Application not found');
+
+    application.status = status;
+
+    if (status === 'Accepted' && !application.enrollmentNumber) {
+        const enrollmentNo = await generateEnrollmentNumber(application.program);
+        application.enrollmentNumber = enrollmentNo;
+        await User.findByIdAndUpdate(application.user, { enrollmentNo });
+    }
+
+    await application.save();
 
     res.status(200).json(new ApiResponse(200, { application }, `Application marked as ${status}`));
 });
