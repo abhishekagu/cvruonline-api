@@ -3,6 +3,7 @@ import PaytmChecksum from 'paytmchecksum';
 import Payment from '../models/Payment.js';
 import Plan from '../models/Plan.js';
 import Subscription from '../models/Subscription.js';
+import { checkAcademicEligibility } from '../utils/eligibilityChecker.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/apiError.js';
 import { ApiResponse } from '../utils/apiResponse.js';
@@ -136,6 +137,12 @@ export const initiatePaytmPayment = asyncHandler(async (req, res) => {
     }
     if (!programId) {
         throw new ApiError(400, 'Program ID is required for subscriptions');
+    }
+
+    // Verify student academic eligibility
+    const eligibility = checkAcademicEligibility(programId, req.user?.profileDetails?.qualifications || []);
+    if (!eligibility.isEligible) {
+        throw new ApiError(400, eligibility.reason);
     }
     
     let paymentType = type || `Tuition Fee - Sem ${semester || 1}`;

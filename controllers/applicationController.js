@@ -2,6 +2,7 @@ import Application from '../models/Application.js';
 import Document from '../models/Document.js';
 import User from '../models/User.js';
 import { generateEnrollmentNumber } from '../utils/enrollmentGenerator.js';
+import { checkAcademicEligibility } from '../utils/eligibilityChecker.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/apiError.js';
 import { ApiResponse } from '../utils/apiResponse.js';
@@ -26,6 +27,12 @@ export const createApplication = asyncHandler(async (req, res) => {
 
     const user = req.user;
     const profile = user.profileDetails || {};
+
+    // Enforce academic eligibility criteria (e.g. PG requires Graduation)
+    const eligibility = checkAcademicEligibility(programId, profile.qualifications || []);
+    if (!eligibility.isEligible) {
+        throw new ApiError(400, eligibility.reason);
+    }
 
     // Determine initial fee
     const resolvedTotalFee = totalFee ? Number(totalFee) : (PROGRAM_FEES[programId] || 22000);
