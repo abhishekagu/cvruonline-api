@@ -1,16 +1,55 @@
+import mongoose from 'mongoose';
 import WorkLog from '../models/WorkLog.js';
+import User from '../models/User.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { ApiError } from '../utils/apiError.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 
-// @desc    Get paginated work and audit logs with rich filters
+// @desc    Get paginated work and audit logs with rich filters and role-scoped visibility
 // @route   GET /api/admin/work-logs
-// @access  Private (Admin / WorkLogs View)
+// @access  Private (Admin / SuperAdmin / Authorized Staff)
 export const getWorkLogs = asyncHandler(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
 
+    // Role-Based Visibility Scoping:
+    // 1. Super Admin: Unrestricted (sees all logs across entire university system)
+    // 2. Admin: Can see staff logs and own logs, but CANNOT see logs of other Admins or Super Admins
+    // 3. Others (staff/counselors/etc.): Can ONLY see their own logs (performedBy == req.user._id)
+    const isSuperAdmin = Boolean(req.user.isSuperAdmin || req.user.role === 'superadmin');
+    const isAdmin = Boolean(req.user.role === 'admin' || req.user.roleRef?.slug === 'admin');
+
     const query = {};
+    let roleScopeFilter = {};
+
+    if (isSuperAdmin) {
+        // Super Admin has full system-wide visibility
+        roleScopeFilter = {};
+    } else if (isAdmin) {
+        // Admin cannot see logs performed by other Admins or Super Admins
+        const otherAdmins = await User.find({
+            $or: [
+                { role: 'superadmin' },
+                { role: 'admin', _id: { $ne: req.user._id } },
+            ],
+        }).select('_id');
+        const excludedUserIds = otherAdmins.map((u) => u._id);
+
+        // Allow staff logs, current admin's own logs, and system automated tasks (performedBy: null)
+        roleScopeFilter = {
+            $or: [
+                { performedBy: { $nin: excludedUserIds } },
+                { performedBy: null, isSystemAction: true },
+            ],
+        };
+    } else {
+        // Others can ONLY see their own work logs
+        roleScopeFilter = { performedBy: req.user._id };
+    }
+
+    // Apply base role scope filter
+    Object.assign(query, roleScopeFilter);
 
     if (req.query.module) {
         query.module = req.query.module;
@@ -21,7 +60,25 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
     }
 
     if (req.query.performedBy) {
-        query.performedBy = req.query.performedBy;
+        if (!isSuperAdmin && !isAdmin) {
+            // Non-admin can only see their own logs
+            query.performedBy = req.user._id;
+        } else if (isAdmin) {
+            // Admin cannot request logs of other admins or superadmins
+            const requestedUser = await User.findById(req.query.performedBy).select('role');
+            if (
+                requestedUser &&
+                (requestedUser.role === 'superadmin' ||
+                    (requestedUser.role === 'admin' && String(requestedUser._id) !== String(req.user._id)))
+            ) {
+                // Return no results
+                query.performedBy = new mongoose.Types.ObjectId();
+            } else {
+                query.performedBy = req.query.performedBy;
+            }
+        } else {
+            query.performedBy = req.query.performedBy;
+        }
     }
 
     if (req.query.targetUser) {
@@ -30,12 +87,22 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
 
     if (req.query.search) {
         const searchRegex = new RegExp(req.query.search.trim(), 'i');
-        query.$or = [
+        const searchConditions = [
             { title: searchRegex },
             { targetEntityId: searchRegex },
             { 'details.reason': searchRegex },
             { 'details.targetEmail': searchRegex },
         ];
+
+        if (query.$or) {
+            query.$and = [
+                { $or: query.$or },
+                { $or: searchConditions },
+            ];
+            delete query.$or;
+        } else {
+            query.$or = searchConditions;
+        }
     }
 
     if (req.query.startDate || req.query.endDate) {
@@ -60,14 +127,14 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
         WorkLog.countDocuments(query),
     ]);
 
-    // Aggregate key stats for dashboard cards
+    // Aggregate key stats for dashboard cards (strictly scoped to user's permitted visibility)
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     const [todayCount, rbacCount, operationalCount] = await Promise.all([
-        WorkLog.countDocuments({ createdAt: { $gte: startOfToday } }),
-        WorkLog.countDocuments({ module: 'RBAC' }),
-        WorkLog.countDocuments({ module: { $ne: 'RBAC' } }),
+        WorkLog.countDocuments({ ...roleScopeFilter, createdAt: { $gte: startOfToday } }),
+        WorkLog.countDocuments({ ...roleScopeFilter, module: 'RBAC' }),
+        WorkLog.countDocuments({ ...roleScopeFilter, module: { $ne: 'RBAC' } }),
     ]);
 
     res.status(200).json(
@@ -78,6 +145,7 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
                 total,
                 page,
                 pages: Math.ceil(total / limit),
+                userScope: isSuperAdmin ? 'all' : isAdmin ? 'staff_and_self' : 'self_only',
                 stats: {
                     totalLogs: total,
                     todayLogs: todayCount,
@@ -92,9 +160,24 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
 
 // @desc    Get audit trail history for a specific user
 // @route   GET /api/admin/work-logs/user/:userId
-// @access  Private (Admin / WorkLogs View)
+// @access  Private (Admin / SuperAdmin / Self)
 export const getUserWorkLogs = asyncHandler(async (req, res) => {
     const { userId } = req.params;
+    const isSuperAdmin = Boolean(req.user.isSuperAdmin || req.user.role === 'superadmin');
+    const isAdmin = Boolean(req.user.role === 'admin' || req.user.roleRef?.slug === 'admin');
+
+    // If regular staff, they can ONLY view their own audit history
+    if (!isSuperAdmin && !isAdmin && String(userId) !== String(req.user._id)) {
+        throw new ApiError(403, 'You are only authorized to view your own work logs');
+    }
+
+    // If admin, ensure target is not another admin or superadmin
+    if (isAdmin && !isSuperAdmin && String(userId) !== String(req.user._id)) {
+        const targetUser = await User.findById(userId).select('role');
+        if (targetUser && (targetUser.role === 'admin' || targetUser.role === 'superadmin')) {
+            throw new ApiError(403, 'Admins are not authorized to view audit logs of other administrators');
+        }
+    }
 
     const logs = await WorkLog.find({
         $or: [{ targetUser: userId }, { performedBy: userId }],
