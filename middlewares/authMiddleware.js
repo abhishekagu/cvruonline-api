@@ -86,7 +86,7 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
  */
 export const restrictTo = (...roles) => {
     return (req, res, next) => {
-        if (req.user?.isSuperAdmin || req.user?.role === 'superadmin') {
+        if (req.user?.isSuperAdmin || req.user?.role === 'superadmin' || req.user?.permissions?.includes('*')) {
             return next();
         }
 

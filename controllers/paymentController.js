@@ -40,8 +40,24 @@ export const getPaymentById = asyncHandler(async (req, res) => {
         throw new ApiError(404, 'Payment not found');
     }
 
+    const isOwner = Boolean(
+        payment.user && (
+            payment.user._id?.toString() === req.user._id.toString() ||
+            payment.user.toString() === req.user._id.toString()
+        )
+    );
+
+    const isAuthorizedStaffOrAdmin = Boolean(
+        req.user?.isSuperAdmin ||
+        req.user?.role === 'superadmin' ||
+        req.user?.role === 'admin' ||
+        req.user?.permissions?.includes('*') ||
+        req.user?.permissions?.includes('payments.view') ||
+        req.user?.permissions?.includes('payments.record_offline')
+    );
+
     // Check if the user is authorized to view this payment
-    if (payment.user._id.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    if (!isOwner && !isAuthorizedStaffOrAdmin) {
         throw new ApiError(403, 'Not authorized to view this payment');
     }
 

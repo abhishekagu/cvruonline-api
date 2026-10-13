@@ -9,7 +9,10 @@
  * 2. Check MongoDB and automatically create the permissions if missing.
  * 3. Grant immediate access to Super Admin.
  * 4. Surface the permission in AdminRoles.jsx for assignment to other roles.
- * 5. Display the page in sidebar navigation for authorized users.
+ * 5. Display the page in sidebar navigation for authorized users (unless hideFromSidebar: true or dynamic :id).
+ * 
+ * NOTE: For sub-actions or detail pages (e.g. "Record Fee", "Receipt", or "/admin/applications/:id"),
+ * specify `hideFromSidebar: true` so the permission is fully tracked & secured without cluttering the sidebar.
  */
 
 export const ADMIN_PAGE_REGISTRY = [
@@ -60,6 +63,7 @@ export const ADMIN_PAGE_REGISTRY = [
         path: '/admin/applications/:id',
         category: 'Documents',
         icon: 'FileCheck',
+        hideFromSidebar: true,
         isSystem: true,
         permissions: [
             {
