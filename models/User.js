@@ -36,8 +36,31 @@ const userSchema = new mongoose.Schema(
         },
         role: {
             type: String,
-            enum: ['applicant', 'student', 'faculty', 'admin', 'superadmin'],
             default: 'applicant',
+            trim: true,
+        },
+        roleRef: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Role',
+        },
+        directPermissions: [
+            {
+                type: String,
+                trim: true,
+            },
+        ],
+        revokedPermissions: [
+            {
+                type: String,
+                trim: true,
+            },
+        ],
+        assignedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+        },
+        assignedAt: {
+            type: Date,
         },
         isVerified: {
             type: Boolean,

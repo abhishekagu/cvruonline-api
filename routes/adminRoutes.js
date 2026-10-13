@@ -10,37 +10,36 @@ import {
     getAllUsers,
     getUserById,
     lookupEnrollmentForPayment,
-    recordOfflinePayment
+    recordOfflinePayment,
 } from '../controllers/adminController.js';
-import { verifyJWT, restrictTo } from '../middlewares/authMiddleware.js';
+import { verifyJWT, checkPermission } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// All admin routes require admin privileges
+// All routes require valid authentication
 router.use(verifyJWT);
-router.use(restrictTo('admin', 'superadmin', 'super-admin'));
+
+// Dashboard Metrics (Requires dashboard.view or Super Admin)
+router.get('/dashboard/metrics', checkPermission('dashboard.view'), getDashboardMetrics);
 
 // Offline Payment Collection
-router.get('/payments/lookup-enrollment', lookupEnrollmentForPayment);
-router.post('/payments/offline', recordOfflinePayment);
+router.get('/payments/lookup-enrollment', checkPermission('payments.record_offline', 'payments.view'), lookupEnrollmentForPayment);
+router.post('/payments/offline', checkPermission('payments.record_offline'), recordOfflinePayment);
 
 // Users Management
-router.get('/users', getAllUsers);
-router.get('/users/:id', getUserById);
+router.get('/users', checkPermission('users.view'), getAllUsers);
+router.get('/users/:id', checkPermission('users.view'), getUserById);
 
 // Application Management
-router.get('/applications', getAllApplications);
-router.patch('/applications/:id/status', updateApplicationStatus);
+router.get('/applications', checkPermission('applications.view'), getAllApplications);
+router.patch('/applications/:id/status', checkPermission('applications.manage'), updateApplicationStatus);
 
 // Document Verification
-router.patch('/documents/:id/verify', verifyDocument);
-
-// Dashboard Metrics
-router.get('/dashboard/metrics', getDashboardMetrics);
+router.patch('/documents/:id/verify', checkPermission('documents.verify'), verifyDocument);
 
 // Contact Inquiries
-router.get('/contacts', getContacts);
-router.patch('/contacts/:id/status', updateContactStatus);
-router.delete('/contacts/:id', deleteContact);
+router.get('/contacts', checkPermission('contacts.view'), getContacts);
+router.patch('/contacts/:id/status', checkPermission('contacts.manage'), updateContactStatus);
+router.delete('/contacts/:id', checkPermission('contacts.manage'), deleteContact);
 
 export default router;

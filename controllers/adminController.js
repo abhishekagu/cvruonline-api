@@ -8,6 +8,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/apiError.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 import { generateEnrollmentNumber } from '../utils/enrollmentGenerator.js';
+import { logWorkActivity } from '../utils/workLogger.js';
 
 // @desc    Get all submitted applications with filters
 // @route   GET /api/v1/admin/applications
@@ -40,6 +41,7 @@ export const updateApplicationStatus = asyncHandler(async (req, res) => {
     let application = await Application.findById(req.params.id);
     if (!application) throw new ApiError(404, 'Application not found');
 
+    const prevStatus = application.status;
     application.status = status;
 
     if (status === 'Accepted' && !application.enrollmentNumber) {
@@ -49,6 +51,22 @@ export const updateApplicationStatus = asyncHandler(async (req, res) => {
     }
 
     await application.save();
+
+    // Log application status change
+    await logWorkActivity({
+        actionType: 'APPLICATION_STATUS_UPDATED',
+        module: 'Applications',
+        performedBy: req.user._id,
+        targetUser: application.user,
+        targetEntityId: String(application._id),
+        title: `Application status updated to "${status}"`,
+        details: {
+            previousStatus: prevStatus,
+            newStatus: status,
+            enrollmentNumber: application.enrollmentNumber,
+        },
+        req,
+    });
 
     res.status(200).json(new ApiResponse(200, { application }, `Application marked as ${status}`));
 });
@@ -66,10 +84,27 @@ export const verifyDocument = asyncHandler(async (req, res) => {
     const document = await Document.findById(req.params.id);
     if (!document) throw new ApiError(404, 'Document not found');
 
+    const prevDocStatus = document.verificationStatus;
     document.verificationStatus = verificationStatus;
     if (adminRemarks) document.adminRemarks = adminRemarks;
     
     await document.save();
+
+    // Log document verification
+    await logWorkActivity({
+        actionType: 'DOCUMENT_VERIFIED',
+        module: 'Documents',
+        performedBy: req.user._id,
+        targetUser: document.user,
+        targetEntityId: String(document._id),
+        title: `Document "${document.documentType || 'Uploaded File'}" marked as ${verificationStatus}`,
+        details: {
+            previousStatus: prevDocStatus,
+            verificationStatus,
+            adminRemarks,
+        },
+        req,
+    });
 
     res.status(200).json(new ApiResponse(200, { document }, `Document marked as ${verificationStatus}`));
 });
@@ -148,6 +183,16 @@ export const updateContactStatus = asyncHandler(async (req, res) => {
         throw new ApiError(404, 'Contact inquiry not found');
     }
 
+    await logWorkActivity({
+        actionType: 'CONTACT_STATUS_UPDATED',
+        module: 'Contacts',
+        performedBy: req.user._id,
+        targetEntityId: String(contact._id),
+        title: `Contact inquiry marked as "${status}"`,
+        details: { email: contact.email, name: contact.name, status },
+        req,
+    });
+
     res.status(200).json(new ApiResponse(200, { contact }, `Inquiry marked as ${status}`));
 });
 
@@ -160,6 +205,16 @@ export const deleteContact = asyncHandler(async (req, res) => {
     if (!contact) {
         throw new ApiError(404, 'Contact inquiry not found');
     }
+
+    await logWorkActivity({
+        actionType: 'CONTACT_DELETED',
+        module: 'Contacts',
+        performedBy: req.user._id,
+        targetEntityId: String(id),
+        title: `Contact inquiry deleted for "${contact.name || contact.email}"`,
+        details: { email: contact.email, name: contact.name },
+        req,
+    });
 
     res.status(200).json(new ApiResponse(200, null, 'Contact inquiry deleted successfully'));
 });
@@ -437,6 +492,28 @@ export const recordOfflinePayment = asyncHandler(async (req, res) => {
     const populatedPayment = await Payment.findById(payment._id)
         .populate('user', 'firstName lastName email phone enrollmentNo')
         .populate('application');
+
+    // Log offline payment recording
+    await logWorkActivity({
+        actionType: 'OFFLINE_PAYMENT_RECORDED',
+        module: 'Payments',
+        performedBy: req.user._id,
+        targetUser: application.user?._id || application.user,
+        targetEntityId: String(payment._id),
+        title: `Offline payment of ₹${numAmount.toLocaleString('en-IN')} collected for ${cleanEnrollment}`,
+        details: {
+            enrollmentNumber: cleanEnrollment,
+            amount: numAmount,
+            paymentMode: paymentMode || 'Cash',
+            transactionId,
+            referenceNumber,
+            remarks,
+            previousPaid: currentPaid,
+            newPaid: newPaidAmount,
+            remainingBalance: newRemainingBalance,
+        },
+        req,
+    });
 
     res.status(201).json(new ApiResponse(201, {
         payment: populatedPayment,

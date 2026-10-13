@@ -4,20 +4,25 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/apiError.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 
+import { computeUserPermissions } from '../middlewares/authMiddleware.js';
+
 const signToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET || 'super-secret-default-key-for-cvru-online-must-change', {
         expiresIn: process.env.JWT_EXPIRES_IN || '90d',
     });
 };
 
-const createSendToken = (user, statusCode, res, message) => {
+const createSendToken = async (user, statusCode, res, message) => {
     const token = signToken(user._id);
 
-    // Remove password from output just to be safe
-    user.password = undefined;
+    const permissions = await computeUserPermissions(user);
+    const userObj = user.toObject ? user.toObject() : { ...user };
+    userObj.password = undefined;
+    userObj.permissions = permissions;
+    userObj.isSuperAdmin = user.role === 'superadmin' || permissions.includes('*');
 
     res.status(statusCode).json(
-        new ApiResponse(statusCode, { user, token }, message)
+        new ApiResponse(statusCode, { user: userObj, token }, message)
     );
 };
 
@@ -42,7 +47,7 @@ export const register = asyncHandler(async (req, res) => {
         role: role || 'applicant',
     });
 
-    createSendToken(newUser, 201, res, 'User registered successfully');
+    await createSendToken(newUser, 201, res, 'User registered successfully');
 });
 
 export const login = asyncHandler(async (req, res) => {
@@ -53,13 +58,13 @@ export const login = asyncHandler(async (req, res) => {
     }
 
     // Explicitly select password since we set select: false in the model
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email }).select('+password').populate('roleRef');
 
     if (!user || !(await user.comparePassword(password, user.password))) {
         throw new ApiError(401, 'Incorrect email or password');
     }
 
-    createSendToken(user, 200, res, 'Logged in successfully');
+    await createSendToken(user, 200, res, 'Logged in successfully');
 });
 
 export const changePassword = asyncHandler(async (req, res) => {

@@ -13,6 +13,8 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import lmsRoutes from './routes/lmsRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import rbacRoutes from './routes/rbacRoutes.js';
+import workLogRoutes from './routes/workLogRoutes.js';
 
 const app = express();
 
@@ -31,6 +33,8 @@ app.use('/api/cms', cmsRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/rbac', rbacRoutes);
+app.use('/api/admin/work-logs', workLogRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/lms', lmsRoutes);
 app.use('/api/contact', contactRoutes);
