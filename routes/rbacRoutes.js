@@ -16,6 +16,7 @@ import {
     restoreUserSpecificPermission,
     grantUserDirectPermission,
     updateUserPermissionOverrides,
+    syncCodeRoutesToPermissions,
 } from '../controllers/rbacController.js';
 import { verifyJWT, checkPermission } from '../middlewares/authMiddleware.js';
 
@@ -23,6 +24,9 @@ const router = express.Router();
 
 // Require login for all RBAC routes
 router.use(verifyJWT);
+
+// Automated Route-to-Permission Discovery & Sync Endpoint
+router.post('/sync-routes', checkPermission('roles.view', 'roles.manage'), syncCodeRoutesToPermissions);
 
 // Permissions Catalog (View only requires roles.view or roles.manage)
 router.get('/permissions', checkPermission('roles.view', 'roles.manage'), getAllPermissions);

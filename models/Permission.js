@@ -17,25 +17,34 @@ const permissionSchema = new mongoose.Schema(
         category: {
             type: String,
             required: [true, 'Permission category is required'],
-            enum: [
-                'Dashboard',
-                'Applications',
-                'Documents',
-                'Payments & Offline Fee',
-                'Users & Students',
-                'Contacts & Inquiries',
-                'CMS & Banners',
-                'Roles & Permissions',
-                'Audit & Work Logs',
-            ],
+            trim: true,
+            default: 'General',
         },
         description: {
+            type: String,
+            trim: true,
+        },
+        route: {
             type: String,
             trim: true,
         },
         isSystem: {
             type: Boolean,
             default: false,
+        },
+        isAutoDiscovered: {
+            type: Boolean,
+            default: false,
+        },
+        actions: [
+            {
+                type: String,
+                trim: true,
+            },
+        ],
+        createdBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
         },
     },
     {

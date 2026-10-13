@@ -2,12 +2,16 @@ import 'dotenv/config';
 import app from './app.js';
 import connectDB from './config/db.js';
 import { seedAdmin } from './utils/seedAdmin.js';
+import { syncRoutePermissions } from './utils/routePermissionSyncer.js';
 
 // Connect to Database
 connectDB();
 
 // Seed Admin User
 seedAdmin();
+
+// Auto-discover and synchronize route permissions from code
+syncRoutePermissions();
 
 const PORT = process.env.PORT || 8000;
 

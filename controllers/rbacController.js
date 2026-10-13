@@ -6,11 +6,15 @@ import { ApiError } from '../utils/apiError.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 import { logWorkActivity } from '../utils/workLogger.js';
 import { computeUserPermissions } from '../middlewares/authMiddleware.js';
+import { syncRoutePermissions } from '../utils/routePermissionSyncer.js';
 
 // @desc    Get all available system permissions grouped by category
 // @route   GET /api/admin/rbac/permissions
 // @access  Private (Admin / Roles View)
 export const getAllPermissions = asyncHandler(async (req, res) => {
+    // JIT auto-sync: Automatically checks code-defined routes and provisions missing permissions in MongoDB
+    await syncRoutePermissions();
+
     const permissions = await Permission.find().sort({ category: 1, name: 1 });
 
     // Group permissions by category for cleaner UI rendering
@@ -800,4 +804,17 @@ export const updateUserPermissionOverrides = asyncHandler(async (req, res) => {
         )
     );
 });
+
+// @desc    Trigger explicit synchronization of code routes to permissions
+// @route   POST /api/admin/rbac/sync-routes
+// @access  Private (Admin / Roles View or Manage)
+export const syncCodeRoutesToPermissions = asyncHandler(async (req, res) => {
+    const { pages } = req.body || {};
+    const result = await syncRoutePermissions(pages, req.user?._id);
+
+    res.status(200).json(
+        new ApiResponse(200, result, 'Route permissions synchronized successfully from code')
+    );
+});
+
 

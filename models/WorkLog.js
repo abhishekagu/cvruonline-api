@@ -42,7 +42,11 @@ const workLogSchema = new mongoose.Schema(
         performedBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
-            required: [true, 'Performer user ID is required'],
+            required: false,
+        },
+        isSystemAction: {
+            type: Boolean,
+            default: false,
         },
         targetUser: {
             type: mongoose.Schema.Types.ObjectId,
