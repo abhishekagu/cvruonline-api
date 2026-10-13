@@ -155,23 +155,6 @@ export const ADMIN_PAGE_REGISTRY = [
         ],
     },
     {
-        id: 'cms',
-        title: 'Academic Programs & CMS Banners',
-        path: '/admin/programs',
-        category: 'CMS & Banners',
-        icon: 'GraduationCap',
-        isSystem: true,
-        permissions: [
-            {
-                name: 'Manage CMS & Programs',
-                slug: 'cms.manage',
-                action: 'manage',
-                description: 'Manage homepage banners, notices, and academic programs',
-                isSystem: true,
-            },
-        ],
-    },
-    {
         id: 'roles',
         title: 'Roles & Permissions',
         path: '/admin/roles',

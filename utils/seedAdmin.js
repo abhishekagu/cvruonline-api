@@ -86,14 +86,6 @@ export const SYSTEM_PERMISSIONS = [
         description: 'Update contact inquiry status and delete resolved inquiries',
         isSystem: true,
     },
-    // CMS
-    {
-        name: 'Manage CMS',
-        slug: 'cms.manage',
-        category: 'CMS & Banners',
-        description: 'Manage homepage banners, notices, and portal announcements',
-        isSystem: true,
-    },
     // Roles & RBAC
     {
         name: 'View Roles & Permissions',
