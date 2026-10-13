@@ -76,7 +76,15 @@ export const changePassword = asyncHandler(async (req, res) => {
 
     const user = await User.findById(req.user._id).select('+password');
 
-    if (!user || !(await user.comparePassword(oldPassword, user.password))) {
+    if (!user) {
+        throw new ApiError(404, 'User not found');
+    }
+
+    if (user.role === 'superadmin' || req.user?.role === 'superadmin' || req.user?.isSuperAdmin) {
+        throw new ApiError(403, 'Password changes are not allowed for Super Admin');
+    }
+
+    if (!(await user.comparePassword(oldPassword, user.password))) {
         throw new ApiError(401, 'Incorrect old password');
     }
 
