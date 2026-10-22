@@ -92,6 +92,16 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
             { targetEntityId: searchRegex },
             { 'details.reason': searchRegex },
             { 'details.targetEmail': searchRegex },
+            { 'details.enrollmentNumber': searchRegex },
+            { 'details.transactionId': searchRegex },
+            { 'details.referenceNumber': searchRegex },
+            { 'details.slug': searchRegex },
+            { 'details.name': searchRegex },
+            { 'details.email': searchRegex },
+            { 'details.remarks': searchRegex },
+            { 'details.adminRemarks': searchRegex },
+            { 'details.submitNote': searchRegex },
+            { 'details.submitterNote': searchRegex },
         ];
 
         if (query.$or) {
@@ -119,8 +129,8 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
 
     const [logs, total] = await Promise.all([
         WorkLog.find(query)
-            .populate('performedBy', 'firstName lastName email role')
-            .populate('targetUser', 'firstName lastName email role')
+            .populate('performedBy', 'firstName lastName email phone role enrollmentNo')
+            .populate('targetUser', 'firstName lastName email phone role enrollmentNo')
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit),
@@ -131,10 +141,11 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const [todayCount, rbacCount, operationalCount] = await Promise.all([
+    const [todayCount, rbacCount, cmsCount, operationalCount] = await Promise.all([
         WorkLog.countDocuments({ ...roleScopeFilter, createdAt: { $gte: startOfToday } }),
         WorkLog.countDocuments({ ...roleScopeFilter, module: 'RBAC' }),
-        WorkLog.countDocuments({ ...roleScopeFilter, module: { $ne: 'RBAC' } }),
+        WorkLog.countDocuments({ ...roleScopeFilter, module: 'CMS' }),
+        WorkLog.countDocuments({ ...roleScopeFilter, module: { $nin: ['RBAC', 'CMS'] } }),
     ]);
 
     res.status(200).json(
@@ -150,6 +161,7 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
                     totalLogs: total,
                     todayLogs: todayCount,
                     rbacLogs: rbacCount,
+                    cmsLogs: cmsCount,
                     operationalLogs: operationalCount,
                 },
             },
@@ -182,8 +194,8 @@ export const getUserWorkLogs = asyncHandler(async (req, res) => {
     const logs = await WorkLog.find({
         $or: [{ targetUser: userId }, { performedBy: userId }],
     })
-        .populate('performedBy', 'firstName lastName email role')
-        .populate('targetUser', 'firstName lastName email role')
+        .populate('performedBy', 'firstName lastName email phone role enrollmentNo')
+        .populate('targetUser', 'firstName lastName email phone role enrollmentNo')
         .sort({ createdAt: -1 })
         .limit(50);
 
