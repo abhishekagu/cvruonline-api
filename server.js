@@ -3,12 +3,16 @@ import app from './app.js';
 import connectDB from './config/db.js';
 import { seedAdmin } from './utils/seedAdmin.js';
 import { syncRoutePermissions } from './utils/routePermissionSyncer.js';
+import { seedInitialPrograms } from './utils/seedPrograms.js';
 
 // Connect to Database
 connectDB();
 
 // Seed Admin User
 seedAdmin();
+
+// Seed Initial Academic Programs for CMS if database is empty
+seedInitialPrograms();
 
 // Auto-discover and synchronize route permissions from code
 syncRoutePermissions();
@@ -52,4 +56,4 @@ process.on('uncaughtException', (err) => {
 
 // nodemon trigger
 
-// nodemon trigger 2
+// nodemon trigger 3 - refreshed programs cms routing

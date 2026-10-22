@@ -34,6 +34,37 @@ export const ADMIN_PAGE_REGISTRY = [
         ],
     },
     {
+        id: 'programs',
+        title: 'Academic Programs (CMS)',
+        path: '/admin/programs',
+        category: 'Academics & CMS',
+        icon: 'GraduationCap',
+        isSystem: true,
+        permissions: [
+            {
+                name: 'View Programs',
+                slug: 'programs.view',
+                action: 'view',
+                description: 'View academic programs list, course details, and CMS content',
+                isSystem: true,
+            },
+            {
+                name: 'Manage Programs',
+                slug: 'programs.manage',
+                action: 'manage',
+                description: 'Create, edit, upload media, publish, and toggle active/inactive programs',
+                isSystem: true,
+            },
+            {
+                name: 'Approve & Publish Programs',
+                slug: 'programs.approve',
+                action: 'approve',
+                description: 'Review program publishing requests, approve to live catalog, or reject with feedback',
+                isSystem: true,
+            },
+        ],
+    },
+    {
         id: 'applications',
         title: 'Applications Management',
         path: '/admin/applications',
