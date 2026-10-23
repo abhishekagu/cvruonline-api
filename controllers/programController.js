@@ -550,8 +550,9 @@ export const updateProgram = asyncHandler(async (req, res) => {
         req.body.assignedReviewer = req.body.assignedReviewer._id || null;
     }
 
-    // Extract file references from the existing program document before updating
-    const previousFiles = extractProgramFiles(program.toObject());
+    // Capture previous state for audit log diff
+    const previousProgramState = program.toObject();
+    const previousFiles = extractProgramFiles(previousProgramState);
 
     Object.assign(program, req.body);
     if (program.publishStatus === 'PUBLISHED') {
@@ -563,6 +564,35 @@ export const updateProgram = asyncHandler(async (req, res) => {
         program.lastPublishedSnapshot = snap;
     }
     await program.save();
+
+    // Compute field-level differences for human-readable audit log
+    const changedFields = [];
+    const fieldsToCompare = [
+        { key: 'title', label: 'Program Title' },
+        { key: 'type', label: 'Degree Type' },
+        { key: 'level', label: 'Academic Level' },
+        { key: 'baseFee', label: 'Base Tuition Fee' },
+        { key: 'publishStatus', label: 'Publish Status' },
+        { key: 'isActive', label: 'Catalog Visibility' },
+        { key: 'heroImage', label: 'Hero Banner Image' },
+        { key: 'cardImage', label: 'Card Thumbnail' },
+        { key: 'brochureUrl', label: 'Brochure PDF' },
+        { key: 'programmeGuideUrl', label: 'Programme Guide PDF' },
+        { key: 'pprUrl', label: 'PPR Document' },
+    ];
+
+    for (const f of fieldsToCompare) {
+        const oldVal = previousProgramState[f.key];
+        const newVal = program[f.key];
+        if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+            changedFields.push({
+                field: f.key,
+                label: f.label,
+                from: oldVal,
+                to: newVal,
+            });
+        }
+    }
 
     // Check for replaced/removed files and delete them if no other program or model uses them
     const currentFiles = extractProgramFiles(program.toObject());
@@ -587,6 +617,9 @@ export const updateProgram = asyncHandler(async (req, res) => {
                 isActive: program.isActive,
                 publishStatus: program.publishStatus,
                 baseFee: program.baseFee,
+                previousStatus: previousProgramState.publishStatus,
+                newStatus: program.publishStatus,
+                changes: changedFields,
             },
         });
     } catch (logErr) {
