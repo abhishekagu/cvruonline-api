@@ -4,6 +4,7 @@ import {
     getAdminPrograms,
     getProgram,
     uploadProgramImage,
+    cleanupUnusedUpload,
     createProgram,
     updateProgram,
     toggleProgramStatus,
@@ -45,6 +46,12 @@ router.post(
     checkPermission('programs.manage'),
     upload.any(),
     uploadProgramImage
+);
+router.post(
+    '/cleanup-file',
+    verifyJWT,
+    checkPermission('programs.manage'),
+    cleanupUnusedUpload
 );
 
 // Program Management Actions

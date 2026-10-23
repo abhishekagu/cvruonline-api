@@ -1,3 +1,4 @@
+import fs from 'fs';
 import mongoose from 'mongoose';
 import Program from '../models/Program.js';
 import WorkLog from '../models/WorkLog.js';
@@ -5,6 +6,12 @@ import { initialProgramsSeedData } from '../utils/seedPrograms.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/apiError.js';
 import { ApiResponse } from '../utils/apiResponse.js';
+import {
+    findExistingDuplicateFile,
+    extractProgramFiles,
+    deleteMultipleFilesIfUnused,
+    deleteFileIfUnused,
+} from '../utils/fileStorageHelper.js';
 
 // @desc    Get all programs (Public catalog: active and published only; Admin: optionally all)
 // @route   GET /api/programs
@@ -167,7 +174,48 @@ export const uploadProgramImage = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'Please select a file to upload');
     }
 
-    // Multer saves file in 'uploads/' directory
+    // Clean up any extra files received if multipart contained duplicate fields
+    if (req.files && req.files.length > 1) {
+        for (let i = 1; i < req.files.length; i++) {
+            try {
+                if (fs.existsSync(req.files[i].path)) {
+                    fs.unlinkSync(req.files[i].path);
+                }
+            } catch (cleanupErr) {
+                // Ignore transient cleanup issue
+            }
+        }
+    }
+
+    // Check if an identical file content already exists in uploads/
+    const duplicate = findExistingDuplicateFile(file.path);
+    if (duplicate) {
+        // Remove newly created duplicate file from disk
+        try {
+            if (fs.existsSync(file.path)) {
+                fs.unlinkSync(file.path);
+            }
+        } catch (unlinkErr) {
+            console.error('[STORAGE] Error unlinking duplicate upload:', unlinkErr.message);
+        }
+
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                {
+                    url: duplicate.url,
+                    filename: duplicate.filename,
+                    originalname: file.originalname,
+                    mimetype: file.mimetype,
+                    size: file.size,
+                    reused: true,
+                },
+                'Existing identical file found in uploads and reused to save storage space'
+            )
+        );
+    }
+
+    // Unique file saved in 'uploads/' directory
     const fileUrl = `/uploads/${file.filename}`;
 
     res.status(200).json(
@@ -179,9 +227,27 @@ export const uploadProgramImage = asyncHandler(async (req, res) => {
                 originalname: file.originalname,
                 mimetype: file.mimetype,
                 size: file.size,
+                reused: false,
             },
             'File uploaded successfully'
         )
+    );
+});
+
+// @desc    Clean up unreferenced uploaded file (e.g. replaced during editing session)
+// @route   POST /api/programs/cleanup-file
+// @access  Private (Staff with programs.manage / Super Admin)
+export const cleanupUnusedUpload = asyncHandler(async (req, res) => {
+    const { fileUrl, fileUrls } = req.body;
+    const targets = Array.isArray(fileUrls) ? fileUrls : (fileUrl ? [fileUrl] : []);
+
+    if (targets.length === 0) {
+        throw new ApiError(400, 'No file URL provided for cleanup');
+    }
+
+    const results = await deleteMultipleFilesIfUnused(targets);
+    res.status(200).json(
+        new ApiResponse(200, { results }, 'Unused files cleanup processed')
     );
 });
 
@@ -484,6 +550,9 @@ export const updateProgram = asyncHandler(async (req, res) => {
         req.body.assignedReviewer = req.body.assignedReviewer._id || null;
     }
 
+    // Extract file references from the existing program document before updating
+    const previousFiles = extractProgramFiles(program.toObject());
+
     Object.assign(program, req.body);
     if (program.publishStatus === 'PUBLISHED') {
         program.isActive = true;
@@ -494,6 +563,15 @@ export const updateProgram = asyncHandler(async (req, res) => {
         program.lastPublishedSnapshot = snap;
     }
     await program.save();
+
+    // Check for replaced/removed files and delete them if no other program or model uses them
+    const currentFiles = extractProgramFiles(program.toObject());
+    const replacedFiles = previousFiles.filter(f => !currentFiles.includes(f));
+    if (replacedFiles.length > 0) {
+        deleteMultipleFilesIfUnused(replacedFiles, program._id).catch(cleanErr => {
+            console.error('[STORAGE] Error cleaning replaced files on program update:', cleanErr.message);
+        });
+    }
 
     // Audit Log
     try {
@@ -866,7 +944,17 @@ export const deleteProgram = asyncHandler(async (req, res) => {
 
     const title = program.title;
     const slug = program.slug;
+    const programId = program._id;
+    const filesToDelete = extractProgramFiles(program.toObject());
+
     await Program.findByIdAndDelete(program._id);
+
+    // Clean up any files that are no longer used by any other program or model
+    if (filesToDelete.length > 0) {
+        deleteMultipleFilesIfUnused(filesToDelete, programId).catch(cleanErr => {
+            console.error('[STORAGE] Error cleaning files on program delete:', cleanErr.message);
+        });
+    }
 
     // Audit Log
     try {

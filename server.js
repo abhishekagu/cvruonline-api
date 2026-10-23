@@ -4,6 +4,7 @@ import connectDB from './config/db.js';
 import { seedAdmin } from './utils/seedAdmin.js';
 import { syncRoutePermissions } from './utils/routePermissionSyncer.js';
 import { seedInitialPrograms } from './utils/seedPrograms.js';
+import { initFileHashCache } from './utils/fileStorageHelper.js';
 
 // Connect to Database
 connectDB();
@@ -16,6 +17,9 @@ seedInitialPrograms();
 
 // Auto-discover and synchronize route permissions from code
 syncRoutePermissions();
+
+// Initialize in-memory cache for uploads deduplication
+initFileHashCache();
 
 const PORT = process.env.PORT || 8000;
 
