@@ -51,6 +51,18 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
     // Apply base role scope filter
     Object.assign(query, roleScopeFilter);
 
+    // Filter by high-level category tab ('rbac' | 'cms' | 'operational' | 'all')
+    if (req.query.category) {
+        if (req.query.category === 'rbac') {
+            query.module = 'RBAC';
+        } else if (req.query.category === 'cms') {
+            query.module = 'CMS';
+        } else if (req.query.category === 'operational') {
+            query.module = { $nin: ['RBAC', 'CMS'] };
+        }
+    }
+
+    // Specific module filter takes precedence if provided
     if (req.query.module) {
         query.module = req.query.module;
     }
@@ -86,10 +98,26 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
     }
 
     if (req.query.search) {
-        const searchRegex = new RegExp(req.query.search.trim(), 'i');
+        const escapedSearch = req.query.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const searchRegex = new RegExp(escapedSearch, 'i');
+
+        // Look up users whose names, email, phone, or enrollment match the query
+        const matchingUsers = await User.find({
+            $or: [
+                { firstName: searchRegex },
+                { lastName: searchRegex },
+                { email: searchRegex },
+                { enrollmentNo: searchRegex },
+                { phone: searchRegex },
+            ],
+        }).select('_id');
+        const matchingUserIds = matchingUsers.map((u) => u._id);
+
         const searchConditions = [
             { title: searchRegex },
             { targetEntityId: searchRegex },
+            { actionType: searchRegex },
+            { module: searchRegex },
             { 'details.reason': searchRegex },
             { 'details.targetEmail': searchRegex },
             { 'details.enrollmentNumber': searchRegex },
@@ -103,6 +131,13 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
             { 'details.submitNote': searchRegex },
             { 'details.submitterNote': searchRegex },
         ];
+
+        if (matchingUserIds.length > 0) {
+            searchConditions.push(
+                { performedBy: { $in: matchingUserIds } },
+                { targetUser: { $in: matchingUserIds } }
+            );
+        }
 
         if (query.$or) {
             query.$and = [
@@ -127,11 +162,21 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
         }
     }
 
+    // Sort order
+    const sortField = req.query.sortBy || 'createdAt';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+    const sort = {};
+    if (['createdAt', 'actionType', 'module', 'title'].includes(sortField)) {
+        sort[sortField] = sortOrder;
+    } else {
+        sort.createdAt = -1;
+    }
+
     const [logs, total] = await Promise.all([
         WorkLog.find(query)
             .populate('performedBy', 'firstName lastName email phone role enrollmentNo')
             .populate('targetUser', 'firstName lastName email phone role enrollmentNo')
-            .sort({ createdAt: -1 })
+            .sort(sort)
             .skip(skip)
             .limit(limit),
         WorkLog.countDocuments(query),
@@ -141,7 +186,8 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const [todayCount, rbacCount, cmsCount, operationalCount] = await Promise.all([
+    const [overallTotalCount, todayCount, rbacCount, cmsCount, operationalCount] = await Promise.all([
+        WorkLog.countDocuments(roleScopeFilter),
         WorkLog.countDocuments({ ...roleScopeFilter, createdAt: { $gte: startOfToday } }),
         WorkLog.countDocuments({ ...roleScopeFilter, module: 'RBAC' }),
         WorkLog.countDocuments({ ...roleScopeFilter, module: 'CMS' }),
@@ -156,9 +202,10 @@ export const getWorkLogs = asyncHandler(async (req, res) => {
                 total,
                 page,
                 pages: Math.ceil(total / limit),
+                limit,
                 userScope: isSuperAdmin ? 'all' : isAdmin ? 'staff_and_self' : 'self_only',
                 stats: {
-                    totalLogs: total,
+                    totalLogs: overallTotalCount,
                     todayLogs: todayCount,
                     rbacLogs: rbacCount,
                     cmsLogs: cmsCount,
