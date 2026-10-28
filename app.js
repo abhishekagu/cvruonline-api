@@ -25,9 +25,11 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Dual-environment support: Strip '/cvruonline' prefix if passed through by reverse proxy
+// Dual-environment support: Strip '/cvruonline-api' or '/cvruonline' prefix if passed through by reverse proxy
 app.use((req, res, next) => {
-    if (req.url.startsWith('/cvruonline/')) {
+    if (req.url.startsWith('/cvruonline-api/')) {
+        req.url = req.url.replace(/^\/cvruonline-api/, '');
+    } else if (req.url.startsWith('/cvruonline/')) {
         req.url = req.url.replace(/^\/cvruonline/, '');
     }
     next();
@@ -36,6 +38,7 @@ app.use((req, res, next) => {
 // Static uploads serving
 app.use('/uploads', express.static('uploads'));
 app.use('/cvruonline/uploads', express.static('uploads'));
+app.use('/cvruonline-api/uploads', express.static('uploads'));
 
 // API Routes
 app.use('/api/auth', authRoutes);
